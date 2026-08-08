@@ -1,0 +1,50 @@
+{
+    "name": "alto/font",
+    "description": "Font file reading and metadata: parse OpenType/TrueType/WOFF/WOFF2, discover installed fonts, and expose per-glyph facts (metrics, outlines) without any drawing or shaping.",
+    "license": "MIT",
+    "type": "library",
+    "authors": [
+        {
+            "name": "Simon André",
+            "email": "smn.andre@gmail.com"
+        }
+    ],
+    "require": {
+        "php": ">=8.4",
+        "ext-zlib": "*"
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.68",
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^12"
+    },
+    "suggest": {
+        "ext-brotli": "Decompresses WOFF2 font data without shelling out to the brotli binary.",
+        "brotli": "Provides Brotli decompression for WOFF2 when ext-brotli is not installed."
+    },
+    "minimum-stability": "stable",
+    "autoload": {
+        "psr-4": {
+            "Alto\\Font\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Alto\\Font\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "scripts": {
+        "check": [
+            "@phpstan",
+            "@cs-check",
+            "@test"
+        ],
+        "cs-check": "php-cs-fixer fix --dry-run --diff",
+        "cs-fix": "php-cs-fixer fix",
+        "phpstan": "phpstan analyse --no-progress",
+        "test": "phpunit"
+    }
+}
