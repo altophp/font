@@ -1,6 +1,14 @@
 {
     "name": "alto/font",
     "description": "Font file reading and metadata: parse OpenType/TrueType/WOFF/WOFF2, discover installed fonts, and expose per-glyph facts (metrics, outlines) without any drawing or shaping.",
+    "keywords": [
+        "font",
+        "opentype",
+        "truetype",
+        "woff",
+        "woff2"
+    ],
+    "homepage": "https://altophp.com/font/",
     "license": "MIT",
     "type": "library",
     "authors": [
@@ -9,6 +17,10 @@
             "email": "smn.andre@gmail.com"
         }
     ],
+    "support": {
+        "issues": "https://github.com/altophp/font/issues",
+        "source": "https://github.com/altophp/font"
+    },
     "require": {
         "php": ">=8.4",
         "ext-zlib": "*"

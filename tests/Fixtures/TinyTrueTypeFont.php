@@ -230,10 +230,15 @@ final class TinyTrueTypeFont
         file_put_contents($path, self::woff2(self::tables(compoundCycle: false, unsupportedCff: false)));
     }
 
-    public static function writeTransformedWoff2(string $path): void
+    public static function writeWoff2WithTransformedHmtx(string $path): void
     {
         $tables = self::tables(compoundCycle: false, unsupportedCff: false);
         $directory = '';
+        $tableData = '';
+        $totalSfntSize = 12 + \count($tables) * 16;
+        $transformedHmtx = "\x02"
+            . self::u16(500) . self::u16(600) . self::u16(610) . self::u16(500) . self::u16(650)
+            . self::i16(0) . self::i16(10) . self::i16(20) . self::i16(0) . self::i16(50);
 
         foreach ($tables as $tag => $table) {
             $tagIndex = array_search($tag, self::WOFF2_KNOWN_TAGS, true);
@@ -242,17 +247,42 @@ final class TinyTrueTypeFont
                 throw new \LogicException(\sprintf('Unknown WOFF2 fixture tag "%s".', $tag));
             }
 
-            $flags = 'glyf' === $tag ? $tagIndex : self::woff2NullTransformFlags($tag, $tagIndex);
-            $directory .= self::u8($flags).self::base128(\strlen($table));
+            $flags = 'hmtx' === $tag ? (1 << 6) | $tagIndex : self::woff2NullTransformFlags($tag, $tagIndex);
+            $directory .= self::u8($flags) . self::base128(\strlen($table));
+            $encodedTable = $table;
 
-            if ('glyf' === $tag) {
-                $directory .= self::base128(\strlen($table));
+            if ('hmtx' === $tag) {
+                $directory .= self::base128(\strlen($transformedHmtx));
+                $encodedTable = $transformedHmtx;
             }
+
+            $tableData .= $encodedTable;
+            $totalSfntSize += \strlen(self::align4($table));
         }
 
-        $length = 48 + \strlen($directory);
+        $compressedData = self::brotliCompress($tableData);
 
-        file_put_contents($path, 'wOF2'."\x00\x01\x00\x00".self::u32($length).self::u16(\count($tables)).self::u16(0).self::u32(0).self::u32(0).self::u16(1).self::u16(0).str_repeat("\0", 20).$directory);
+        if (null === $compressedData) {
+            throw new \RuntimeException('The brotli binary is required to generate the WOFF2 fixture.');
+        }
+
+        $length = 48 + \strlen($directory) + \strlen($compressedData);
+
+        file_put_contents(
+            $path,
+            'wOF2'
+                . "\x00\x01\x00\x00"
+                . self::u32($length)
+                . self::u16(\count($tables))
+                . self::u16(0)
+                . self::u32($totalSfntSize)
+                . self::u32(\strlen($compressedData))
+                . self::u16(1)
+                . self::u16(0)
+                . str_repeat("\0", 20)
+                . $directory
+                . $compressedData,
+        );
     }
 
     public static function writeWoff2WithImplausibleTableLength(string $path): void

@@ -37,4 +37,5 @@ jobs:
     uses: altophp/.github/.github/workflows/tests.yml@main
     with:
       php-version: ${{ matrix.php }}
+      php-extensions: brotli
       # phpunit-args: '--colors=never'

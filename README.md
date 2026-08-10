@@ -57,8 +57,7 @@ $bold = $finder->get(FontQuery::family('Inter')->weight(700));
 | TrueType (`glyf` outlines) | `.ttf` | Supported, including compound glyphs |
 | OpenType with `glyf` outlines | `.otf` | Supported |
 | WOFF v1 | `.woff` | Supported (`ext-zlib`, always available) |
-| WOFF2, null-transform tables | `.woff2` | Supported **only** with `ext-brotli` or the `brotli` CLI binary on `PATH` -- without either, throws `UnsupportedFontException` rather than failing silently or partially |
-| WOFF2 with transformed `glyf`/`loca` tables | `.woff2` | Not supported yet -- rejects cleanly |
+| WOFF2 | `.woff2` | Supported, including transformed `glyf`/`loca` and `hmtx` tables. Requires `ext-brotli` or the `brotli` CLI binary on `PATH` |
 | CFF/CFF2 outlines (Type 2 charstrings) | `.otf` | Not supported yet -- rejects cleanly |
 | TrueType/OpenType collections | `.ttc`, `.otc` | Supported: `Font::fromFile($path, faceIndex: $n)` selects a face; `FontFace::$faceIndex`/`$faceCount` report the file's shape |
 | Compressed (WOFF2) font collections | `.woff2` | Not supported yet -- rejects cleanly |
@@ -80,7 +79,7 @@ composer require alto/font
 composer install
 composer check       # phpstan + cs-check + test
 composer test        # phpunit only
-composer cs-fix       # apply coding-standard fixes
+composer cs-fix      # apply coding-standard fixes
 ```
 
 ## License
