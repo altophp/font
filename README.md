@@ -68,9 +68,6 @@ $bold = $finder->get(FontQuery::family('Inter')->weight(700));
 Every unsupported case raises a typed exception (`UnsupportedFontException` or
 `InvalidFontException`) instead of degrading silently.
 
-See `ARCHITECTURE.md` for how this package's scope was decided and what moved
-where.
-
 ## Installation
 
 ```bash
@@ -85,3 +82,7 @@ composer check       # phpstan + cs-check + test
 composer test        # phpunit only
 composer cs-fix       # apply coding-standard fixes
 ```
+
+## License
+
+Alto Font is available under the [MIT License](LICENSE).
