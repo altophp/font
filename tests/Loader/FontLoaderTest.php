@@ -71,15 +71,16 @@ final class FontLoaderTest extends TestCase
         self::assertSame('M 100 0 L 300 700 L 500 0 L 100 0 Z', self::describeContour($font->glyphOutline($glyphId)->contours[0]));
     }
 
-    public function testItRejectsTransformedWoff2Tables(): void
+    public function testItLoadsTransformedWoff2Tables(): void
     {
-        $path = sys_get_temp_dir() . '/atelier-font-transformed.woff2';
-        TinyTrueTypeFont::writeTransformedWoff2($path);
+        $font = self::loadFont(__DIR__ . '/../Fixtures/Fonts/Inter-Regular-latin.woff2');
+        $glyphId = $font->glyphIdForCodepoint(65);
+        self::assertNotNull($glyphId);
 
-        $this->expectException(UnsupportedFontException::class);
-        $this->expectExceptionMessage('WOFF2 transformed table "glyf" is not supported');
-
-        self::loadFont($path);
+        self::assertSame('Inter', $font->getDescriptor()->family);
+        self::assertSame(2048, $font->face()->unitsPerEm);
+        self::assertSame(1413, $font->glyphMetrics($glyphId)->advanceWidth);
+        self::assertCount(2, $font->glyphOutline($glyphId)->contours);
     }
 
     public function testItMapsAsciiCodepointsToGlyphIdsAndMetrics(): void

@@ -36,17 +36,6 @@ use Alto\Font\Variation\VariationCoordinates;
 
 final class SfntFont
 {
-    private const array WOFF2_KNOWN_TAGS = [
-        'cmap', 'head', 'hhea', 'hmtx', 'maxp', 'name', 'OS/2', 'post',
-        'cvt ', 'fpgm', 'glyf', 'loca', 'prep', 'CFF ', 'VORG', 'EBDT',
-        'EBLC', 'gasp', 'hdmx', 'kern', 'LTSH', 'PCLT', 'VDMX', 'vhea',
-        'vmtx', 'BASE', 'GDEF', 'GPOS', 'GSUB', 'EBSC', 'JSTF', 'MATH',
-        'CBDT', 'CBLC', 'COLR', 'CPAL', 'SVG ', 'sbix', 'acnt', 'avar',
-        'bdat', 'bloc', 'bsln', 'cvar', 'fdsc', 'feat', 'fmtx', 'fvar',
-        'gvar', 'hsty', 'just', 'lcar', 'mort', 'morx', 'opbd', 'prop',
-        'trak', 'Zapf', 'Silf', 'Glat', 'Gloc', 'Feat', 'Sill',
-    ];
-
     private const int ARG_1_AND_2_ARE_WORDS = 0x0001;
     private const int ARGS_ARE_XY_VALUES = 0x0002;
     private const int WE_HAVE_A_SCALE = 0x0008;
@@ -115,7 +104,7 @@ final class SfntFont
         }
 
         if ('wOF2' === $scalerType) {
-            return self::parse(self::sfntFromWoff2($reader), $path . '#woff2', $faceIndex);
+            return self::parse(Woff2Decoder::decode($reader), $path . '#woff2', $faceIndex);
         }
 
         if ('ttcf' === $scalerType) {
@@ -148,7 +137,7 @@ final class SfntFont
 
         if ("\x00\x01\x00\x00" !== $scalerType && 'true' !== $scalerType) {
             if ('OTTO' === $scalerType) {
-                throw new UnsupportedFontException('CFF/OpenType outlines are not supported in atelier/font v1.');
+                throw new UnsupportedFontException('CFF/OpenType outlines are not supported.');
             }
 
             if ('ttcf' === $scalerType) {
@@ -259,157 +248,6 @@ final class SfntFont
         }
 
         return $flavor . self::uint16($numTables) . self::uint16(0) . self::uint16(0) . self::uint16(0) . $records . $tableData;
-    }
-
-    private static function sfntFromWoff2(BinaryReader $woff2): string
-    {
-        $flavor = $woff2->string(4, 4);
-
-        if ('ttcf' === $flavor) {
-            throw new UnsupportedFontException('WOFF2 font collections are not supported in atelier/font v1.');
-        }
-
-        $declaredLength = $woff2->uint32(8);
-        $numTables = $woff2->uint16(12);
-        $totalCompressedSize = $woff2->uint32(20);
-
-        if ($declaredLength > $woff2->length()) {
-            throw new InvalidFontException('WOFF2 declared length exceeds file length.');
-        }
-
-        $cursor = 48;
-        $entries = [];
-
-        for ($i = 0; $i < $numTables; ++$i) {
-            $flags = $woff2->uint8($cursor++);
-            $tagIndex = $flags & 0x3F;
-            $transformVersion = $flags >> 6;
-
-            if (0x3F === $tagIndex) {
-                $tag = $woff2->string($cursor, 4);
-                $cursor += 4;
-            } else {
-                $tag = self::WOFF2_KNOWN_TAGS[$tagIndex];
-            }
-
-            $originalLength = self::readUIntBase128($woff2, $cursor);
-            $isNullTransform = self::isWoff2NullTransform($tag, $transformVersion);
-
-            if (!$isNullTransform) {
-                self::readUIntBase128($woff2, $cursor);
-                throw new UnsupportedFontException(\sprintf('WOFF2 transformed table "%s" is not supported in atelier/font v1.', $tag));
-            }
-
-            if ($originalLength > self::MAX_DECOMPRESSED_TABLE_BLOCK_SIZE) {
-                throw new InvalidFontException(\sprintf('WOFF2 table "%s" declares an implausible decompressed size.', $tag));
-            }
-
-            $entries[] = [$tag, $originalLength];
-        }
-
-        $totalOriginalLength = array_sum(array_column($entries, 1));
-
-        if ($totalOriginalLength > self::MAX_DECOMPRESSED_TABLE_BLOCK_SIZE) {
-            throw new InvalidFontException('WOFF2 declares an implausible total decompressed table size.');
-        }
-
-        $compressedData = $woff2->string($cursor, $totalCompressedSize);
-        $tableBlock = self::brotliDecompress($compressedData);
-
-        if (\strlen($tableBlock) !== $totalOriginalLength) {
-            throw new InvalidFontException('WOFF2 decompressed to an unexpected total length.');
-        }
-        $blockCursor = 0;
-        $sfntOffset = 12 + $numTables * 16;
-        $records = '';
-        $tableData = '';
-
-        foreach ($entries as [$tag, $originalLength]) {
-            $table = substr($tableBlock, $blockCursor, $originalLength);
-
-            $blockCursor += $originalLength;
-            $records .= $tag . self::uint32(0) . self::uint32($sfntOffset) . self::uint32($originalLength);
-            $paddedTable = self::pad4($table);
-            $tableData .= $paddedTable;
-            $sfntOffset += \strlen($paddedTable);
-        }
-
-        return $flavor . self::uint16($numTables) . self::uint16(0) . self::uint16(0) . self::uint16(0) . $records . $tableData;
-    }
-
-    private static function isWoff2NullTransform(string $tag, int $transformVersion): bool
-    {
-        if ('glyf' === $tag || 'loca' === $tag) {
-            return 3 === $transformVersion;
-        }
-
-        return 0 === $transformVersion;
-    }
-
-    private static function readUIntBase128(BinaryReader $reader, int &$cursor): int
-    {
-        $accumulator = 0;
-
-        for ($i = 0; $i < 5; ++$i) {
-            $byte = $reader->uint8($cursor++);
-
-            if (0 === $i && 0x80 === $byte) {
-                throw new InvalidFontException('WOFF2 UIntBase128 value has leading zeros.');
-            }
-
-            if (0 !== ($accumulator & 0xFE000000)) {
-                throw new InvalidFontException('WOFF2 UIntBase128 value exceeds 32 bits.');
-            }
-
-            $accumulator = ($accumulator << 7) | ($byte & 0x7F);
-
-            if (0 === ($byte & 0x80)) {
-                return $accumulator;
-            }
-        }
-
-        throw new InvalidFontException('WOFF2 UIntBase128 sequence exceeds 5 bytes.');
-    }
-
-    private static function brotliDecompress(string $compressedData): string
-    {
-        foreach (['brotli_uncompress', 'brotli_uncompress_data'] as $function) {
-            if (\function_exists($function)) {
-                $decompressed = $function($compressedData);
-
-                if (\is_string($decompressed)) {
-                    return $decompressed;
-                }
-            }
-        }
-
-        $process = proc_open(
-            ['brotli', '--decompress', '--stdout'],
-            [
-                0 => ['pipe', 'r'],
-                1 => ['pipe', 'w'],
-                2 => ['pipe', 'w'],
-            ],
-            $pipes,
-        );
-
-        if (!\is_resource($process)) {
-            throw new UnsupportedFontException('WOFF2 Brotli decompression requires ext-brotli or the brotli binary.');
-        }
-
-        fwrite($pipes[0], $compressedData);
-        fclose($pipes[0]);
-        $decompressed = stream_get_contents($pipes[1]);
-        $error = stream_get_contents($pipes[2]);
-        fclose($pipes[1]);
-        fclose($pipes[2]);
-        $exitCode = proc_close($process);
-
-        if (0 !== $exitCode || !\is_string($decompressed)) {
-            throw new InvalidFontException('WOFF2 Brotli decompression failed.' . ('' === $error ? '' : ' ' . $error));
-        }
-
-        return $decompressed;
     }
 
     public function face(): FontFace
@@ -660,7 +498,7 @@ final class SfntFont
             $cursor += 4;
 
             if (0 === ($flags & self::ARGS_ARE_XY_VALUES)) {
-                throw new UnsupportedFontException('Point-matched compound glyphs are not supported in atelier/font v1.');
+                throw new UnsupportedFontException('Point-matched compound glyphs are not supported.');
             }
 
             if (0 !== ($flags & self::ARG_1_AND_2_ARE_WORDS)) {
@@ -1063,7 +901,7 @@ final class SfntFont
 
         foreach ($unsupported as $tag => $label) {
             if (isset($tables[$tag])) {
-                throw new UnsupportedFontException(\sprintf('%s are not supported in atelier/font v1.', $label));
+                throw new UnsupportedFontException(\sprintf('%s are not supported.', $label));
             }
         }
     }

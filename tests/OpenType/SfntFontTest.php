@@ -21,6 +21,7 @@ use Alto\Font\Glyph\GlyphId;
 use Alto\Font\Glyph\GlyphPoint;
 use Alto\Font\Glyph\PathCommand;
 use Alto\Font\OpenType\SfntFont;
+use Alto\Font\OpenType\Woff2Decoder;
 use Alto\Font\Tests\Fixtures\ContourAssertions;
 use Alto\Font\Tests\Fixtures\TinyTrueTypeFont;
 use Alto\Font\Variation\VariationCoordinates;
@@ -28,6 +29,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 
 #[CoversClass(SfntFont::class)]
+#[CoversClass(Woff2Decoder::class)]
 final class SfntFontTest extends TestCase
 {
     use ContourAssertions;
@@ -278,20 +280,36 @@ final class SfntFontTest extends TestCase
     public function testItRejectsWoff2ContainersWithInvalidLengths(): void
     {
         $this->expectException(InvalidFontException::class);
-        $this->expectExceptionMessage('WOFF2 declared length exceeds file length.');
+        $this->expectExceptionMessage('WOFF2 declared length does not match file length.');
 
         SfntFont::parse('wOF2' . "\x00\x01\x00\x00" . self::u32(100) . self::u16(0) . self::u16(0) . self::u32(0) . self::u32(0));
     }
 
-    public function testItRejectsTransformedWoff2Tables(): void
+    public function testItParsesTransformedWoff2Tables(): void
     {
-        $path = sys_get_temp_dir() . '/atelier-font-truetype-transformed-' . bin2hex(random_bytes(4)) . '.woff2';
-        TinyTrueTypeFont::writeTransformedWoff2($path);
+        $font = SfntFont::open(__DIR__ . '/../Fixtures/Fonts/Inter-Regular-latin.woff2');
+        $glyphId = $font->glyphIdForCodepoint(233);
+        self::assertNotNull($glyphId);
 
-        $this->expectException(UnsupportedFontException::class);
-        $this->expectExceptionMessage('WOFF2 transformed table "glyf" is not supported');
+        self::assertSame(518, $font->face()->glyphCount);
+        self::assertSame(1194, $font->glyphMetrics($glyphId)->advanceWidth);
+        self::assertCount(2, $font->glyphOutline($glyphId)->contours);
+    }
 
-        SfntFont::open($path);
+    public function testItReconstructsTransformedWoff2HorizontalMetrics(): void
+    {
+        if (!TinyTrueTypeFont::hasBrotliEncoder()) {
+            self::markTestSkipped('The brotli binary is required to generate the WOFF2 fixture.');
+        }
+
+        $path = sys_get_temp_dir() . '/alto-font-transformed-hmtx-' . bin2hex(random_bytes(4)) . '.woff2';
+        TinyTrueTypeFont::writeWoff2WithTransformedHmtx($path);
+        $font = SfntFont::open($path);
+
+        self::assertSame(600, $font->glyphMetrics(new GlyphId(1))->advanceWidth);
+        self::assertSame(10, $font->glyphMetrics(new GlyphId(1))->leftSideBearing);
+        self::assertSame(650, $font->glyphMetrics(new GlyphId(4))->advanceWidth);
+        self::assertSame(50, $font->glyphMetrics(new GlyphId(4))->leftSideBearing);
     }
 
     public function testItRejectsWoff2TablesDeclaringAnImplausibleDecompressedSize(): void
@@ -599,7 +617,7 @@ final class SfntFontTest extends TestCase
     private static function readUIntBase128(string $bytes): int
     {
         $cursor = 0;
-        $method = new \ReflectionMethod(SfntFont::class, 'readUIntBase128');
+        $method = new \ReflectionMethod(Woff2Decoder::class, 'readUIntBase128');
         $arguments = [new BinaryReader($bytes, 'woff2'), &$cursor];
         $result = $method->invokeArgs(null, $arguments);
 
