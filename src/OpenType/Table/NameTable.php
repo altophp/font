@@ -15,6 +15,9 @@ namespace Alto\Font\OpenType\Table;
 
 use Alto\Font\Binary\BinaryReader;
 
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final class NameTable
 {
     /**

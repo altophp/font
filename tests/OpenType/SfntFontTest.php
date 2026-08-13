@@ -29,7 +29,6 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 
 #[CoversClass(SfntFont::class)]
-#[CoversClass(Woff2Decoder::class)]
 final class SfntFontTest extends TestCase
 {
     use ContourAssertions;

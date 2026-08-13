@@ -15,6 +15,9 @@ namespace Alto\Font\Descriptor;
 
 use Alto\Font\FontFace;
 
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class FontDescriptor
 {
     public function __construct(

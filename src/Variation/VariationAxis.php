@@ -13,6 +13,9 @@ declare(strict_types=1);
 
 namespace Alto\Font\Variation;
 
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class VariationAxis
 {
     public const int HIDDEN_AXIS = 0x0001;

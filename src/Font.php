@@ -25,6 +25,9 @@ use Alto\Font\Text\UnicodeString;
 use Alto\Font\Variation\FontVariations;
 use Alto\Font\Variation\VariationCoordinates;
 
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class Font
 {
     public function __construct(

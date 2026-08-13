@@ -21,6 +21,9 @@ use Alto\Font\Variation\ItemStore\TupleVariation;
 use Alto\Font\Variation\NormalizedCoordinates;
 use Alto\Font\Variation\VariationDeltas;
 
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class GvarTable
 {
     private const int LONG_OFFSETS = 0x0001;

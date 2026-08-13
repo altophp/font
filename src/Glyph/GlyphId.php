@@ -15,6 +15,9 @@ namespace Alto\Font\Glyph;
 
 use Alto\Font\Exception\InvalidFontException;
 
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class GlyphId
 {
     public function __construct(public int $value)

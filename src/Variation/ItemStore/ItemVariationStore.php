@@ -18,6 +18,9 @@ use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\Variation\FontVariations;
 use Alto\Font\Variation\NormalizedCoordinates;
 
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class ItemVariationStore
 {
     private const int LONG_WORDS = 0x8000;

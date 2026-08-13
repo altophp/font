@@ -15,6 +15,9 @@ namespace Alto\Font\Loader;
 
 use Alto\Font\Font;
 
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 interface FontLoaderInterface
 {
     public function load(string|\Stringable $file, int $faceIndex = 0): Font;

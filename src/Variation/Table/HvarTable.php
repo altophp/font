@@ -20,6 +20,9 @@ use Alto\Font\Variation\ItemStore\DeltaSetIndexMap;
 use Alto\Font\Variation\ItemStore\ItemVariationStore;
 use Alto\Font\Variation\NormalizedCoordinates;
 
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class HvarTable
 {
     private function __construct(

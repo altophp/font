@@ -16,6 +16,9 @@ namespace Alto\Font\Binary;
 use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\OpenType\Table\TableRecord;
 
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class BinaryReader
 {
     public function __construct(private string $data, private string $source) {}

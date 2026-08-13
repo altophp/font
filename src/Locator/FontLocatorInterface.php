@@ -13,6 +13,9 @@ declare(strict_types=1);
 
 namespace Alto\Font\Locator;
 
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 interface FontLocatorInterface
 {
     /**

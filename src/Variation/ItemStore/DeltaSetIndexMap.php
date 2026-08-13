@@ -16,6 +16,9 @@ namespace Alto\Font\Variation\ItemStore;
 use Alto\Font\Binary\BinaryReader;
 use Alto\Font\Exception\InvalidFontException;
 
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class DeltaSetIndexMap
 {
     private const int INNER_INDEX_BIT_COUNT_MASK = 0x0F;

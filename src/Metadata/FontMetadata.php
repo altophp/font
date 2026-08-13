@@ -16,6 +16,9 @@ namespace Alto\Font\Metadata;
 use Alto\Font\Descriptor\FontDescriptor;
 use Alto\Font\FontFace;
 
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class FontMetadata
 {
     public function __construct(

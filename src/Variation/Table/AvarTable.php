@@ -17,6 +17,9 @@ use Alto\Font\Binary\BinaryReader;
 use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\Variation\FontVariations;
 
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class AvarTable
 {
     /**

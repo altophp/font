@@ -13,4 +13,7 @@ declare(strict_types=1);
 
 namespace Alto\Font\Exception;
 
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final class InvalidFontException extends \RuntimeException implements FontExceptionInterface {}

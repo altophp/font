@@ -34,6 +34,9 @@ use Alto\Font\Variation\Table\GvarTable;
 use Alto\Font\Variation\Table\HvarTable;
 use Alto\Font\Variation\VariationCoordinates;
 
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final class SfntFont
 {
     private const int ARG_1_AND_2_ARE_WORDS = 0x0001;
@@ -694,7 +697,10 @@ final class SfntFont
             }
         }
 
-        return [\array_slice($xDeltas, 0, $pointCount), \array_slice($yDeltas, 0, $pointCount)];
+        return [
+            array_values(\array_slice($xDeltas, 0, $pointCount)),
+            array_values(\array_slice($yDeltas, 0, $pointCount)),
+        ];
     }
 
     /**
