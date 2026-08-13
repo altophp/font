@@ -17,6 +17,9 @@ use Alto\Font\Descriptor\FontStretch;
 use Alto\Font\Descriptor\FontStyle;
 use Alto\Font\Descriptor\FontWeight;
 
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class FontQuery
 {
     public function __construct(

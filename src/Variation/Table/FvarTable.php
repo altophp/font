@@ -22,6 +22,9 @@ use Alto\Font\Variation\VariationInstance;
 /**
  * @internal
  */
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final class FvarTable
 {
     /**

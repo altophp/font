@@ -13,6 +13,9 @@ declare(strict_types=1);
 
 namespace Alto\Font\Glyph;
 
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class PathCommand
 {
     /**

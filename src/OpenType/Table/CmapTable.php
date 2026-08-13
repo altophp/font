@@ -16,6 +16,9 @@ namespace Alto\Font\OpenType\Table;
 use Alto\Font\Binary\BinaryReader;
 use Alto\Font\Exception\InvalidFontException;
 
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class CmapTable
 {
     /**

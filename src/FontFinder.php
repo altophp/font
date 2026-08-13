@@ -22,6 +22,9 @@ use Alto\Font\Locator\FontLocator;
 use Alto\Font\Locator\FontLocatorInterface;
 use Alto\Font\Metadata\FontMetadata;
 
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final class FontFinder
 {
     /**

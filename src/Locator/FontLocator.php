@@ -18,6 +18,9 @@ namespace Alto\Font\Locator;
  * of directories - explicit ones, the OS-standard system font directories, or
  * both combined. Skips unreadable subdirectories rather than failing.
  */
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class FontLocator implements FontLocatorInterface
 {
     private const array EXTENSIONS = ['ttf', 'otf', 'woff', 'woff2', 'ttc', 'otc'];

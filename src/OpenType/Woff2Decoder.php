@@ -20,6 +20,9 @@ use Alto\Font\Exception\UnsupportedFontException;
 /**
  * @internal
  */
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final class Woff2Decoder
 {
     private const array KNOWN_TAGS = [
@@ -799,12 +802,23 @@ final class Woff2Decoder
             throw new UnsupportedFontException('WOFF2 Brotli decompression requires ext-brotli or the brotli binary.');
         }
 
-        fwrite($pipes[0], $compressedData);
-        fclose($pipes[0]);
-        $decompressed = stream_get_contents($pipes[1]);
-        $error = stream_get_contents($pipes[2]);
-        fclose($pipes[1]);
-        fclose($pipes[2]);
+        $pipeResources = (array) $pipes;
+
+        if (!isset($pipeResources[0], $pipeResources[1], $pipeResources[2])
+            || !\is_resource($pipeResources[0])
+            || !\is_resource($pipeResources[1])
+            || !\is_resource($pipeResources[2])) {
+            proc_close($process);
+
+            throw new InvalidFontException('WOFF2 Brotli decompression failed to open process pipes.');
+        }
+
+        fwrite($pipeResources[0], $compressedData);
+        fclose($pipeResources[0]);
+        $decompressed = stream_get_contents($pipeResources[1]);
+        $error = stream_get_contents($pipeResources[2]);
+        fclose($pipeResources[1]);
+        fclose($pipeResources[2]);
         $exitCode = proc_close($process);
 
         if (0 !== $exitCode || !\is_string($decompressed)) {

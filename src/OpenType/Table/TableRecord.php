@@ -13,6 +13,9 @@ declare(strict_types=1);
 
 namespace Alto\Font\OpenType\Table;
 
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class TableRecord
 {
     public function __construct(

@@ -15,6 +15,9 @@ namespace Alto\Font\Text;
 
 use Alto\Font\Exception\InvalidFontException;
 
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final class UnicodeString
 {
     /**

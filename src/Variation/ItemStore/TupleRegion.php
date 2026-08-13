@@ -16,6 +16,9 @@ namespace Alto\Font\Variation\ItemStore;
 use Alto\Font\Variation\FontVariations;
 use Alto\Font\Variation\NormalizedCoordinates;
 
+/**
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class TupleRegion
 {
     /**

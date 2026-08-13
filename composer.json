@@ -1,6 +1,6 @@
 {
     "name": "alto/font",
-    "description": "Font file reading and metadata: parse OpenType/TrueType/WOFF/WOFF2, discover installed fonts, and expose per-glyph facts (metrics, outlines) without any drawing or shaping.",
+    "description": "Read OpenType, TrueType, WOFF, and WOFF2 font files from PHP.",
     "keywords": [
         "font",
         "opentype",
@@ -8,7 +8,7 @@
         "woff",
         "woff2"
     ],
-    "homepage": "https://altophp.com/font/",
+    "homepage": "https://altophp.com/font",
     "license": "MIT",
     "type": "library",
     "authors": [
@@ -19,22 +19,28 @@
     ],
     "support": {
         "issues": "https://github.com/altophp/font/issues",
-        "source": "https://github.com/altophp/font"
+        "source": "https://github.com/altophp/font",
+        "docs": "https://altophp.com/font"
     },
+    "funding": [
+        {
+            "type": "github",
+            "url": "https://github.com/sponsors/smnandre"
+        }
+    ],
     "require": {
-        "php": ">=8.4",
+        "php": "^8.4",
+        "ext-iconv": "*",
         "ext-zlib": "*"
     },
     "require-dev": {
-        "friendsofphp/php-cs-fixer": "^3.68",
+        "friendsofphp/php-cs-fixer": "^3.94",
         "phpstan/phpstan": "^2.1",
-        "phpunit/phpunit": "^12"
+        "phpunit/phpunit": "^12.5"
     },
     "suggest": {
-        "ext-brotli": "Decompresses WOFF2 font data without shelling out to the brotli binary.",
-        "brotli": "Provides Brotli decompression for WOFF2 when ext-brotli is not installed."
+        "ext-brotli": "Decompresses WOFF2 font data without shelling out to the brotli binary."
     },
-    "minimum-stability": "stable",
     "autoload": {
         "psr-4": {
             "Alto\\Font\\": "src/"
@@ -49,14 +55,14 @@
         "sort-packages": true
     },
     "scripts": {
-        "check": [
-            "@phpstan",
-            "@cs-check",
+        "cs": "vendor/bin/php-cs-fixer fix --dry-run --diff --sequential",
+        "cs:fix": "vendor/bin/php-cs-fixer fix --sequential",
+        "qa": [
+            "@cs",
+            "@sa",
             "@test"
         ],
-        "cs-check": "php-cs-fixer fix --dry-run --diff",
-        "cs-fix": "php-cs-fixer fix",
-        "phpstan": "phpstan analyse --no-progress",
+        "sa": "vendor/bin/phpstan analyse --memory-limit=-1",
         "test": "phpunit"
     }
 }
