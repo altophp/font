@@ -24,6 +24,7 @@ $advanceWidth = $font->getMetrics('A')->advanceWidth;
 - [Metadata](metadata.md): inspect names, descriptors, dimensions, and licensing fields.
 - [Glyphs](glyphs.md): resolve characters to glyphs and read metrics and outlines.
 - [Variations](variations.md): inspect axes and select a variable-font instance.
+- [Writing](writing.md): create standalone SFNT, WOFF, WOFF2, and conservative Unicode subsets.
 
 Alto Font reports facts stored in fonts. Text layout, fallback, bidirectional
 text, shaping, and rendering belong to higher-level packages.

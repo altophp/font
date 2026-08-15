@@ -1,6 +1,6 @@
 {
     "name": "alto/font",
-    "description": "Read OpenType, TrueType, WOFF, and WOFF2 font files from PHP.",
+    "description": "Font reading, metadata, writing, and Unicode subsetting for OpenType, TrueType, WOFF, and WOFF2.",
     "keywords": [
         "font",
         "opentype",
@@ -39,7 +39,8 @@
         "phpunit/phpunit": "^12.5"
     },
     "suggest": {
-        "ext-brotli": "Decompresses WOFF2 font data without shelling out to the brotli binary."
+        "ext-brotli": "Compresses WOFF2 in BROTLI_FONT mode and decompresses it without a child process.",
+        "brotli": "Provides process-backed Brotli compression and decompression when ext-brotli is unavailable."
     },
     "autoload": {
         "psr-4": {

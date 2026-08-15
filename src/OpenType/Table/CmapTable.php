@@ -31,6 +31,14 @@ final readonly class CmapTable
         return $this->codepointToGlyphId[$codepoint] ?? null;
     }
 
+    /**
+     * @return array<int, int>
+     */
+    public function mappings(): array
+    {
+        return $this->codepointToGlyphId;
+    }
+
     public static function parse(BinaryReader $reader): self
     {
         if (0 !== $reader->uint16(0)) {

@@ -20,6 +20,7 @@ use Alto\Font\FontFinder;
 use Alto\Font\FontQuery;
 use Alto\Font\Glyph\GlyphId;
 use Alto\Font\Loader\FontLoader;
+use Alto\Font\Metadata\FontFormat;
 use Alto\Font\Tests\Fixtures\ContourAssertions;
 use Alto\Font\Tests\Fixtures\TinyTrueTypeFont;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -41,6 +42,8 @@ final class FontLoaderTest extends TestCase
         self::assertSame(5, $face->glyphCount);
         self::assertSame('Atelier Tiny', $face->name(1));
         self::assertContains('glyf', $face->tables);
+        self::assertSame(FontFormat::TrueType, $face->format);
+        self::assertSame(FontFormat::TrueType, $font->metadata()->format);
     }
 
     public function testItLoadsWoffTrueTypeContainers(): void
@@ -52,6 +55,8 @@ final class FontLoaderTest extends TestCase
         self::assertNotNull($glyphId);
 
         self::assertSame(1000, $font->face()->unitsPerEm);
+        self::assertSame(FontFormat::Woff, $font->face()->format);
+        self::assertSame(FontFormat::Woff, $font->metadata()->format);
         self::assertSame('M 100 0 L 300 700 L 500 0 L 100 0 Z', self::describeContour($font->glyphOutline($glyphId)->contours[0]));
     }
 
@@ -68,6 +73,8 @@ final class FontLoaderTest extends TestCase
         self::assertNotNull($glyphId);
 
         self::assertSame(1000, $font->face()->unitsPerEm);
+        self::assertSame(FontFormat::Woff2, $font->face()->format);
+        self::assertSame(FontFormat::Woff2, $font->metadata()->format);
         self::assertSame('M 100 0 L 300 700 L 500 0 L 100 0 Z', self::describeContour($font->glyphOutline($glyphId)->contours[0]));
     }
 
@@ -239,6 +246,8 @@ final class FontLoaderTest extends TestCase
         self::assertSame(1000, $firstFace->unitsPerEm);
         self::assertSame(0, $firstFace->faceIndex);
         self::assertSame(2, $firstFace->faceCount);
+        self::assertSame(FontFormat::TrueTypeCollection, $firstFace->format);
+        self::assertSame(FontFormat::TrueTypeCollection, self::loadFont($path)->metadata()->format);
         self::assertSame(2048, $secondFace->unitsPerEm);
         self::assertSame(1, $secondFace->faceIndex);
     }

@@ -25,6 +25,18 @@ enum FontFormat: string
     case TrueTypeCollection = 'truetype-collection';
     case Unknown = 'unknown';
 
+    public static function fromSignature(string $signature): self
+    {
+        return match ($signature) {
+            "\x00\x01\x00\x00", 'true' => self::TrueType,
+            'OTTO' => self::OpenType,
+            'wOFF' => self::Woff,
+            'wOF2' => self::Woff2,
+            'ttcf' => self::TrueTypeCollection,
+            default => self::Unknown,
+        };
+    }
+
     public static function fromPath(string $path): self
     {
         return match (strtolower(pathinfo($path, \PATHINFO_EXTENSION))) {

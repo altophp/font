@@ -23,9 +23,11 @@ use Alto\Font\Glyph\GlyphMetrics;
 use Alto\Font\Glyph\GlyphOutline;
 use Alto\Font\Glyph\GlyphPoint;
 use Alto\Font\Glyph\PathCommand;
+use Alto\Font\Metadata\FontFormat;
 use Alto\Font\OpenType\Table\CmapTable;
 use Alto\Font\OpenType\Table\NameTable;
 use Alto\Font\OpenType\Table\TableRecord;
+use Alto\Font\Subset\SubsetOptions;
 use Alto\Font\Variation\FontVariations;
 use Alto\Font\Variation\NormalizedCoordinates;
 use Alto\Font\Variation\Table\AvarTable;
@@ -65,6 +67,8 @@ final class SfntFont
     private function __construct(
         private readonly BinaryReader $reader,
         private readonly string $path,
+        private readonly FontFormat $format,
+        private readonly SfntDocument $document,
         private readonly array $tables,
         private readonly CmapTable $cmap,
         private readonly int $unitsPerEm,
@@ -103,18 +107,39 @@ final class SfntFont
         $scalerType = $reader->string(0, 4);
 
         if ('wOFF' === $scalerType) {
-            return self::parse(self::sfntFromWoff($reader), $path . '#woff', $faceIndex);
+            return self::parseSfntDirectory(
+                new BinaryReader(self::sfntFromWoff($reader), $path),
+                $path,
+                0,
+                $faceIndex,
+                1,
+                format: FontFormat::Woff,
+            );
         }
 
         if ('wOF2' === $scalerType) {
-            return self::parse(Woff2Decoder::decode($reader), $path . '#woff2', $faceIndex);
+            return self::parseSfntDirectory(
+                new BinaryReader(Woff2Decoder::decode($reader), $path),
+                $path,
+                0,
+                $faceIndex,
+                1,
+                format: FontFormat::Woff2,
+            );
         }
 
         if ('ttcf' === $scalerType) {
             return self::parseCollection($reader, $path, $faceIndex);
         }
 
-        return self::parseSfntDirectory($reader, $path, 0, $faceIndex, 1);
+        return self::parseSfntDirectory(
+            $reader,
+            $path,
+            0,
+            $faceIndex,
+            1,
+            format: FontFormat::fromSignature($scalerType),
+        );
     }
 
     private static function parseCollection(BinaryReader $reader, string $path, int $faceIndex): self
@@ -131,11 +156,26 @@ final class SfntFont
 
         $directoryOffset = $reader->uint32(12 + $faceIndex * 4);
 
-        return self::parseSfntDirectory($reader, $path . '#' . $faceIndex, $directoryOffset, $faceIndex, $numFonts);
+        return self::parseSfntDirectory(
+            $reader,
+            $path,
+            $directoryOffset,
+            $faceIndex,
+            $numFonts,
+            false,
+            FontFormat::TrueTypeCollection,
+        );
     }
 
-    private static function parseSfntDirectory(BinaryReader $reader, string $path, int $directoryOffset, int $faceIndex, int $faceCount): self
-    {
+    private static function parseSfntDirectory(
+        BinaryReader $reader,
+        string $path,
+        int $directoryOffset,
+        int $faceIndex,
+        int $faceCount,
+        bool $standalone = true,
+        FontFormat $format = FontFormat::Unknown,
+    ): self {
         $scalerType = $reader->string($directoryOffset, 4);
 
         if ("\x00\x01\x00\x00" !== $scalerType && 'true' !== $scalerType) {
@@ -185,6 +225,8 @@ final class SfntFont
         return new self(
             $reader,
             $path,
+            $format,
+            new SfntDocument($reader, $scalerType, $tables, $path, $faceIndex, $faceCount, $standalone),
             $tables,
             $cmap,
             $unitsPerEm,
@@ -209,13 +251,20 @@ final class SfntFont
         $declaredLength = $woff->uint32(8);
         $numTables = $woff->uint16(12);
 
-        if ($declaredLength > $woff->length()) {
-            throw new InvalidFontException('WOFF declared length exceeds file length.');
+        if ($declaredLength !== $woff->length()) {
+            throw new InvalidFontException('WOFF declared length does not match file length.');
         }
 
-        $sfntOffset = 12 + $numTables * 16;
-        $records = '';
-        $tableData = '';
+        if (0 === $numTables) {
+            throw new InvalidFontException('WOFF declares no font tables.');
+        }
+
+        $declaredSfntSize = $woff->uint32(16);
+        $directoryEnd = 44 + $numTables * 20;
+        $entries = [];
+        $ranges = [];
+        $previousTag = null;
+        $totalOriginalLength = 0;
 
         for ($i = 0; $i < $numTables; ++$i) {
             $entryOffset = 44 + $i * 20;
@@ -223,7 +272,45 @@ final class SfntFont
             $offset = $woff->uint32($entryOffset + 4);
             $compressedLength = $woff->uint32($entryOffset + 8);
             $originalLength = $woff->uint32($entryOffset + 12);
-            $checksum = $woff->uint32($entryOffset + 16);
+            $declaredChecksum = $woff->uint32($entryOffset + 16);
+
+            if (null !== $previousTag && strcmp($previousTag, $tag) >= 0) {
+                throw new InvalidFontException('WOFF table directory must contain unique tags in ascending order.');
+            }
+
+            if ($compressedLength > $originalLength) {
+                throw new InvalidFontException(\sprintf('WOFF table "%s" has a compressed length greater than its original length.', $tag));
+            }
+
+            if (0 !== $offset % 4 || $offset < $directoryEnd || $offset + $compressedLength > $declaredLength) {
+                throw new InvalidFontException(\sprintf('WOFF table "%s" has an invalid data range.', $tag));
+            }
+
+            $previousTag = $tag;
+            $totalOriginalLength += $originalLength;
+
+            if ($totalOriginalLength > self::MAX_DECOMPRESSED_TABLE_BLOCK_SIZE) {
+                throw new InvalidFontException('WOFF declares an implausible total decompressed table size.');
+            }
+
+            $entries[] = [$tag, $offset, $compressedLength, $originalLength, $declaredChecksum];
+            $ranges[] = [$offset, ($offset + $compressedLength + 3) & ~3];
+        }
+
+        usort($ranges, static fn(array $left, array $right): int => $left[0] <=> $right[0]);
+        $previousEnd = $directoryEnd;
+
+        foreach ($ranges as [$start, $end]) {
+            if ($start < $previousEnd) {
+                throw new InvalidFontException('WOFF table data ranges overlap.');
+            }
+
+            $previousEnd = $end;
+        }
+
+        $tables = [];
+
+        foreach ($entries as [$tag, $offset, $compressedLength, $originalLength, $declaredChecksum]) {
             $payload = $woff->string($offset, $compressedLength);
 
             if ($compressedLength === $originalLength) {
@@ -244,13 +331,30 @@ final class SfntFont
                 throw new InvalidFontException(\sprintf('WOFF table "%s" decompressed to an unexpected length.', $tag));
             }
 
-            $records .= $tag . self::uint32($checksum) . self::uint32($sfntOffset) . self::uint32($originalLength);
-            $paddedTable = self::pad4($table);
-            $tableData .= $paddedTable;
-            $sfntOffset += \strlen($paddedTable);
+            $checksumData = $table;
+
+            if ('head' === $tag) {
+                if (\strlen($checksumData) < 12) {
+                    throw new InvalidFontException('SFNT head table is truncated.');
+                }
+
+                $checksumData = substr_replace($checksumData, "\0\0\0\0", 8, 4);
+            }
+
+            if (SfntChecksum::calculate($checksumData) !== $declaredChecksum) {
+                throw new InvalidFontException(\sprintf('WOFF table "%s" checksum does not match its declared checksum.', $tag));
+            }
+
+            $tables[$tag] = $table;
         }
 
-        return $flavor . self::uint16($numTables) . self::uint16(0) . self::uint16(0) . self::uint16(0) . $records . $tableData;
+        $sfnt = SfntBuilder::build($flavor, $tables);
+
+        if (\strlen($sfnt) !== $declaredSfntSize) {
+            throw new InvalidFontException('WOFF totalSfntSize does not match the reconstructed font size.');
+        }
+
+        return $sfnt;
     }
 
     public function face(): FontFace
@@ -268,6 +372,34 @@ final class SfntFont
             names: $this->names,
             faceIndex: $this->faceIndex,
             faceCount: $this->faceCount,
+            format: $this->format,
+        );
+    }
+
+    public function toSfnt(): string
+    {
+        return $this->document->toSfnt();
+    }
+
+    /**
+     * @internal
+     */
+    public function document(): SfntDocument
+    {
+        return $this->document;
+    }
+
+    /**
+     * @internal
+     */
+    public function subset(SubsetOptions $options): GlyfSubset
+    {
+        return GlyfSubsetter::subset(
+            $this->document,
+            $this->cmap,
+            $this->glyphOffsets,
+            $this->glyphCount,
+            $options,
         );
     }
 
@@ -872,21 +1004,6 @@ final class SfntFont
         ksort($tables);
 
         return $tables;
-    }
-
-    private static function pad4(string $data): string
-    {
-        return $data . str_repeat("\0", (4 - \strlen($data) % 4) % 4);
-    }
-
-    private static function uint16(int $value): string
-    {
-        return pack('n', $value & 0xFFFF);
-    }
-
-    private static function uint32(int $value): string
-    {
-        return pack('N', $value);
     }
 
     /**

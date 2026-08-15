@@ -15,12 +15,16 @@ namespace Alto\Font;
 
 use Alto\Font\Descriptor\FontDescriptor;
 use Alto\Font\Exception\InvalidFontException;
+use Alto\Font\Exception\UnsupportedFontException;
 use Alto\Font\Glyph\GlyphId;
 use Alto\Font\Glyph\GlyphMetrics;
 use Alto\Font\Glyph\GlyphOutline;
 use Alto\Font\Loader\FontLoader;
 use Alto\Font\Metadata\FontMetadata;
+use Alto\Font\OpenType\SfntDocument;
 use Alto\Font\OpenType\SfntFont;
+use Alto\Font\Subset\SubsetOptions;
+use Alto\Font\Subset\SubsetResult;
 use Alto\Font\Text\UnicodeString;
 use Alto\Font\Variation\FontVariations;
 use Alto\Font\Variation\VariationCoordinates;
@@ -88,6 +92,11 @@ final readonly class Font
         return $this->variationCoordinates;
     }
 
+    public function withoutVariations(): self
+    {
+        return null === $this->variationCoordinates ? $this : new self($this->font);
+    }
+
     public function glyphIdForCodepoint(int $codepoint): ?GlyphId
     {
         return $this->font->glyphIdForCodepoint($codepoint);
@@ -127,5 +136,48 @@ final readonly class Font
     public function glyphOutline(GlyphId $glyphId): GlyphOutline
     {
         return $this->font->glyphOutline($glyphId, $this->variationCoordinates);
+    }
+
+    public function toSfnt(): string
+    {
+        if (null !== $this->variationCoordinates) {
+            throw new UnsupportedFontException('Writing a selected variable-font instance is not supported yet.');
+        }
+
+        return $this->font->toSfnt();
+    }
+
+    /**
+     * @internal
+     */
+    public function sfntDocument(): SfntDocument
+    {
+        if (null !== $this->variationCoordinates) {
+            throw new UnsupportedFontException('Writing a selected variable-font instance is not supported yet.');
+        }
+
+        return $this->font->document();
+    }
+
+    public function subset(SubsetOptions $options): SubsetResult
+    {
+        if (null !== $this->variationCoordinates) {
+            throw new UnsupportedFontException('Subsetting a selected variable-font view is not supported.');
+        }
+
+        $originalGlyphCount = $this->face()->glyphCount;
+        $subset = $this->font->subset($options);
+        $data = $subset->document->toSfnt();
+        $font = new self(SfntFont::parse($data, $this->face()->path . '#subset'));
+
+        return new SubsetResult(
+            $font,
+            $options->unicodes,
+            $subset->mappedCodepointCount,
+            $originalGlyphCount,
+            $subset->retainedGlyphCount,
+            \strlen($data),
+            $subset->warnings,
+        );
     }
 }

@@ -28,6 +28,14 @@ final readonly class BinaryReader
         return \strlen($this->data);
     }
 
+    /**
+     * @internal
+     */
+    public function bytes(): string
+    {
+        return $this->data;
+    }
+
     public function uint8(int $offset): int
     {
         $this->assertRange($offset, 1);

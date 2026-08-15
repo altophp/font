@@ -46,7 +46,7 @@ final readonly class FontMetadata
         return new self(
             family: $descriptor->family,
             subfamily: $descriptor->subfamily,
-            format: FontFormat::fromPath($face->path),
+            format: $face->format,
             descriptor: $descriptor,
             fullName: $descriptor->fullName,
             postScriptName: $descriptor->postScriptName,

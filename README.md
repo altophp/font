@@ -1,6 +1,8 @@
 # ALTO Font
 
-Read OpenType, TrueType, WOFF, and WOFF2 font files from PHP.
+Font reading, metadata, writing, and Unicode subsetting for PHP: parse
+OpenType/TrueType/WOFF/WOFF2, discover installed fonts, and expose per-glyph
+facts.
 
 &nbsp; ![PHP Version](https://img.shields.io/badge/PHP-8.4%2B-00B7FF?logoColor=00B7FF&labelColor=050608)
 &nbsp; ![CI](https://img.shields.io/github/actions/workflow/status/altophp/font/CI.yml?branch=main&label=Tests&labelColor=050608&color=00B7FF)
@@ -8,9 +10,11 @@ Read OpenType, TrueType, WOFF, and WOFF2 font files from PHP.
 &nbsp; ![License](https://img.shields.io/github/license/altophp/font?label=License&labelColor=050608&color=00B7FF)
 &nbsp; [![GitHub Sponsors](https://img.shields.io/github/sponsors/smnandre?logo=githubsponsors&logoColor=00B7FF&label=%20Sponsor&labelColor=050608&color=00B7FF)](https://github.com/sponsors/smnandre)
 
-ALTO Font answers what a font contains: names, descriptors, licensing metadata, face dimensions,
-character maps, glyph metrics, outlines, collections, and variable-font axes. It deliberately does
-not shape text, apply kerning, or render glyphs.
+`alto/font` answers "what is this font, and what are the facts about this
+glyph" -- metadata, discovery, per-glyph metrics and outlines. It does not
+shape text, does not apply kerning, and does not draw anything. Turning a
+string of text into positioned, drawn glyphs is a higher-level package's job;
+this one only reads and reports facts.
 
 ```php
 use Alto\Font\Font;

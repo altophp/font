@@ -13,6 +13,8 @@ declare(strict_types=1);
 
 namespace Alto\Font;
 
+use Alto\Font\Metadata\FontFormat;
+
 /**
  * @author Simon André <smn.andre@gmail.com>
  */
@@ -32,6 +34,7 @@ final readonly class FontFace
         public array $names = [],
         public int $faceIndex = 0,
         public int $faceCount = 1,
+        public FontFormat $format = FontFormat::Unknown,
     ) {}
 
     public function name(int $nameId): ?string

@@ -1,15 +1,14 @@
 # Font formats
 
-`Font::fromFile()` detects the container from its contents. The filename
-extension is used when reporting `FontMetadata::$format`, but it does not make
-an unsupported font readable.
+`Font::fromFile()` detects the container from its signature. The reported
+format therefore remains correct for extensionless files and in-memory data.
 
 | Format | Support | Requirement or boundary |
 | --- | --- | --- |
 | TrueType with `glyf` outlines | Supported | Includes compound glyphs |
 | OpenType with `glyf` outlines | Supported | CFF and CFF2 outlines are rejected |
 | WOFF 1 | Supported | Requires the Zlib extension |
-| WOFF2 | Supported | Requires `ext-brotli` or the `brotli` executable |
+| WOFF2 | Supported | Reading requires `ext-brotli` or the `brotli` executable; writing requires an explicit compressor |
 | TTC and OTC collections | Supported | Select a face with `faceIndex` |
 | WOFF2 collections | Not supported | Rejected explicitly |
 | Variable `glyf` fonts | Supported | Includes `fvar`, `avar`, `gvar`, and `HVAR` |

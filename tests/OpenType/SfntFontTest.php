@@ -20,6 +20,8 @@ use Alto\Font\Glyph\Contour;
 use Alto\Font\Glyph\GlyphId;
 use Alto\Font\Glyph\GlyphPoint;
 use Alto\Font\Glyph\PathCommand;
+use Alto\Font\Metadata\FontFormat;
+use Alto\Font\OpenType\SfntBuilder;
 use Alto\Font\OpenType\SfntFont;
 use Alto\Font\OpenType\Woff2Decoder;
 use Alto\Font\Tests\Fixtures\ContourAssertions;
@@ -29,6 +31,8 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 
 #[CoversClass(SfntFont::class)]
+#[CoversClass(SfntBuilder::class)]
+#[CoversClass(Woff2Decoder::class)]
 final class SfntFontTest extends TestCase
 {
     use ContourAssertions;
@@ -45,17 +49,35 @@ final class SfntFontTest extends TestCase
         self::assertSame(-200, $face->descender);
         self::assertSame(5, $face->glyphCount);
         self::assertSame('Atelier Tiny', $face->name(1));
+        self::assertSame(FontFormat::TrueType, $face->format);
         self::assertSame(1, $glyphId->value);
         self::assertSame(600, $font->glyphMetrics($glyphId)->advanceWidth);
         self::assertSame('M 100 0 L 300 700 L 500 0 L 100 0 Z', self::describeContour($font->glyphOutline($glyphId)->contours[0]));
+    }
+
+    public function testItDetectsAnInMemoryTrueTypeContainerInsteadOfUsingItsLabel(): void
+    {
+        $data = file_get_contents(self::fontPath());
+        self::assertIsString($data);
+
+        $face = SfntFont::parse($data, 'misleading.woff2')->face();
+
+        self::assertSame('misleading.woff2', $face->path);
+        self::assertSame(FontFormat::TrueType, $face->format);
     }
 
     public function testItParsesWoffContainers(): void
     {
         $path = sys_get_temp_dir() . '/atelier-font-truetype-woff-' . bin2hex(random_bytes(4)) . '.woff';
         TinyTrueTypeFont::writeWoff($path);
+        $data = file_get_contents($path);
+        self::assertIsString($data);
 
-        self::assertSame('Atelier Tiny', SfntFont::open($path)->face()->name(1));
+        $face = SfntFont::parse($data)->face();
+
+        self::assertSame('Atelier Tiny', $face->name(1));
+        self::assertSame('<memory>', $face->path);
+        self::assertSame(FontFormat::Woff, $face->format);
     }
 
     public function testItParsesNullTransformWoff2Containers(): void
@@ -66,8 +88,14 @@ final class SfntFontTest extends TestCase
 
         $path = sys_get_temp_dir() . '/atelier-font-truetype-woff2-' . bin2hex(random_bytes(4)) . '.woff2';
         TinyTrueTypeFont::writeWoff2($path);
+        $data = file_get_contents($path);
+        self::assertIsString($data);
 
-        self::assertSame('Atelier Tiny', SfntFont::open($path)->face()->name(1));
+        $face = SfntFont::parse($data)->face();
+
+        self::assertSame('Atelier Tiny', $face->name(1));
+        self::assertSame('<memory>', $face->path);
+        self::assertSame(FontFormat::Woff2, $face->format);
     }
 
     public function testItRejectsMissingFiles(): void
@@ -101,12 +129,16 @@ final class SfntFontTest extends TestCase
     {
         $path = sys_get_temp_dir() . '/atelier-font-ttc-' . bin2hex(random_bytes(4)) . '.ttc';
         TinyTrueTypeFont::writeCollection($path, [1000, 2048]);
+        $data = file_get_contents($path);
+        self::assertIsString($data);
 
-        $font = SfntFont::open($path);
+        $font = SfntFont::parse($data);
 
         self::assertSame(1000, $font->face()->unitsPerEm);
+        self::assertSame('<memory>', $font->face()->path);
         self::assertSame(0, $font->face()->faceIndex);
         self::assertSame(2, $font->face()->faceCount);
+        self::assertSame(FontFormat::TrueTypeCollection, $font->face()->format);
     }
 
     public function testItReadsARequestedFaceOfACollection(): void
@@ -119,6 +151,42 @@ final class SfntFontTest extends TestCase
         self::assertSame(2048, $font->face()->unitsPerEm);
         self::assertSame(1, $font->face()->faceIndex);
         self::assertSame(2, $font->face()->faceCount);
+    }
+
+    public function testItExtractsACollectionFaceAsAStandaloneSfnt(): void
+    {
+        $path = sys_get_temp_dir() . '/alto-font-ttc-' . bin2hex(random_bytes(4)) . '.ttc';
+        TinyTrueTypeFont::writeCollection($path, [1000, 2048]);
+
+        $font = SfntFont::parse(SfntFont::open($path, faceIndex: 1)->toSfnt());
+
+        self::assertSame(2048, $font->face()->unitsPerEm);
+        self::assertSame(0, $font->face()->faceIndex);
+        self::assertSame(1, $font->face()->faceCount);
+    }
+
+    public function testItConvertsWoffToReloadableSfnt(): void
+    {
+        $path = sys_get_temp_dir() . '/alto-font-woff-' . bin2hex(random_bytes(4)) . '.woff';
+        TinyTrueTypeFont::writeWoff($path);
+
+        $font = SfntFont::parse(SfntFont::open($path)->toSfnt());
+
+        self::assertSame('Atelier Tiny', $font->face()->name(1));
+    }
+
+    public function testItConvertsWoff2ToReloadableSfnt(): void
+    {
+        if (!TinyTrueTypeFont::hasBrotliEncoder()) {
+            self::markTestSkipped('The brotli binary is required to generate the WOFF2 fixture.');
+        }
+
+        $path = sys_get_temp_dir() . '/alto-font-woff2-' . bin2hex(random_bytes(4)) . '.woff2';
+        TinyTrueTypeFont::writeWoff2($path);
+
+        $font = SfntFont::parse(SfntFont::open($path)->toSfnt());
+
+        self::assertSame('Atelier Tiny', $font->face()->name(1));
     }
 
     public function testItRejectsCollectionsWhereAFacePointsToAnotherCollection(): void
@@ -233,7 +301,7 @@ final class SfntFontTest extends TestCase
     public function testItRejectsWoffContainersWithInvalidLengths(): void
     {
         $this->expectException(InvalidFontException::class);
-        $this->expectExceptionMessage('WOFF declared length exceeds file length.');
+        $this->expectExceptionMessage('WOFF declared length does not match file length.');
 
         SfntFont::parse('wOFF' . "\x00\x01\x00\x00" . self::u32(100) . self::u16(0) . self::u16(0));
     }
@@ -252,7 +320,7 @@ final class SfntFontTest extends TestCase
         self::assertIsString($payload);
 
         $this->expectException(InvalidFontException::class);
-        $this->expectExceptionMessage('WOFF table "test" decompressed to an unexpected length.');
+        $this->expectExceptionMessage('WOFF table "test" has a compressed length greater than its original length.');
 
         SfntFont::parse(self::woffWithTable('test', $payload, 4));
     }
@@ -263,9 +331,53 @@ final class SfntFontTest extends TestCase
         self::assertIsString($payload);
 
         $this->expectException(InvalidFontException::class);
-        $this->expectExceptionMessage('WOFF table "test" declares an implausible decompressed size.');
+        $this->expectExceptionMessage('WOFF declares an implausible total decompressed table size.');
 
         SfntFont::parse(self::woffWithTable('test', $payload, 200 * 1024 * 1024));
+    }
+
+    public function testItRejectsWoffContainersWithTrailingData(): void
+    {
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('WOFF declared length does not match file length.');
+
+        SfntFont::parse(self::woffWithTable('test', 'data', 4) . "\0");
+    }
+
+    public function testItRejectsWoffContainersWithoutTables(): void
+    {
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('WOFF declares no font tables.');
+
+        SfntFont::parse('wOFF' . "\x00\x01\x00\x00" . self::u32(44) . self::u16(0) . str_repeat("\0", 30));
+    }
+
+    public function testItRejectsWoffTotalSfntSizeMismatches(): void
+    {
+        $woff = self::woffWithTable('test', 'data', 4);
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('WOFF totalSfntSize does not match');
+
+        SfntFont::parse(substr_replace($woff, self::u32(1), 16, 4));
+    }
+
+    public function testItRejectsWoffTableChecksumMismatches(): void
+    {
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('WOFF table "test" checksum does not match its declared checksum.');
+
+        SfntFont::parse(self::woffWithTable('test', 'data', 4, 1));
+    }
+
+    public function testWoffHeadChecksumIgnoresCheckSumAdjustment(): void
+    {
+        $head = substr_replace(str_repeat("\0", 54), self::u32(0x12345678), 8, 4);
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('Required table "cmap" is missing.');
+
+        SfntFont::parse(self::woffWithTable('head', $head, \strlen($head)));
     }
 
     public function testItRejectsWoff2CollectionsAndInvalidLengths(): void
@@ -678,10 +790,22 @@ final class SfntFontTest extends TestCase
         return "\x00\x01\x00\x00" . self::u16(\count($tables)) . self::u16(0) . self::u16(0) . self::u16(0) . $records . $data;
     }
 
-    private static function woffWithTable(string $tag, string $payload, int $originalLength): string
+    private static function woffWithTable(string $tag, string $payload, int $originalLength, ?int $declaredChecksum = null): string
     {
         $offset = 64;
         $length = $offset + \strlen($payload);
+        $table = $payload;
+
+        if (\strlen($payload) !== $originalLength) {
+            $decompressed = @gzuncompress($payload, $originalLength);
+            $table = \is_string($decompressed) ? $decompressed : '';
+        }
+
+        if ('head' === $tag && \strlen($table) >= 12) {
+            $table = substr_replace($table, "\0\0\0\0", 8, 4);
+        }
+
+        $declaredChecksum ??= self::checksum($table);
 
         return 'wOFF'
             . "\x00\x01\x00\x00"
@@ -696,8 +820,32 @@ final class SfntFontTest extends TestCase
             . self::u32($offset)
             . self::u32(\strlen($payload))
             . self::u32($originalLength)
-            . self::u32(0)
+            . self::u32($declaredChecksum)
             . $payload;
+    }
+
+    private static function checksum(string $data): int
+    {
+        $data = self::pad4($data);
+        $sum = 0;
+
+        for ($offset = 0, $length = \strlen($data); $offset < $length; $offset += 4) {
+            $word = unpack('Nvalue', substr($data, $offset, 4));
+
+            if (!\is_array($word)) {
+                self::fail('Could not calculate test WOFF checksum.');
+            }
+
+            $value = $word['value'] ?? null;
+
+            if (!\is_int($value)) {
+                self::fail('Could not calculate test WOFF checksum.');
+            }
+
+            $sum = ($sum + $value) & 0xFFFFFFFF;
+        }
+
+        return $sum;
     }
 
     private static function pad4(string $data): string
