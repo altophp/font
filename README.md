@@ -1,8 +1,7 @@
 # ALTO Font
 
-Font reading, metadata, writing, and Unicode subsetting for PHP: parse
-OpenType/TrueType/WOFF/WOFF2, discover installed fonts, and expose per-glyph
-facts.
+Read, inspect, write, and subset OpenType, TrueType, WOFF, and WOFF2 font files
+from PHP.
 
 &nbsp; ![PHP Version](https://img.shields.io/badge/PHP-8.4%2B-00B7FF?logoColor=00B7FF&labelColor=050608)
 &nbsp; ![CI](https://img.shields.io/github/actions/workflow/status/altophp/font/CI.yml?branch=main&label=Tests&labelColor=050608&color=00B7FF)
@@ -10,11 +9,10 @@ facts.
 &nbsp; ![License](https://img.shields.io/github/license/altophp/font?label=License&labelColor=050608&color=00B7FF)
 &nbsp; [![GitHub Sponsors](https://img.shields.io/github/sponsors/smnandre?logo=githubsponsors&logoColor=00B7FF&label=%20Sponsor&labelColor=050608&color=00B7FF)](https://github.com/sponsors/smnandre)
 
-`alto/font` answers "what is this font, and what are the facts about this
-glyph" -- metadata, discovery, per-glyph metrics and outlines. It does not
-shape text, does not apply kerning, and does not draw anything. Turning a
-string of text into positioned, drawn glyphs is a higher-level package's job;
-this one only reads and reports facts.
+ALTO Font answers what a font contains: names, descriptors, licensing metadata,
+face dimensions, character maps, glyph metrics, outlines, collections, and
+variable-font axes. It also writes supported faces and creates conservative
+Unicode subsets. It does not shape text, apply kerning, or render glyphs.
 
 ```php
 use Alto\Font\Font;
@@ -26,8 +24,8 @@ echo $font->face()->unitsPerEm;
 echo $font->getMetrics('A')->advanceWidth;
 ```
 
-The package has no PHP package runtime dependencies. Unsupported containers and font features fail
-with typed exceptions instead of returning partial data.
+Unsupported containers and font features fail with typed exceptions instead
+of returning partial data.
 
 ## Installation
 
@@ -37,8 +35,9 @@ Install ALTO Font with Composer:
 composer require alto/font
 ```
 
-ALTO Font requires PHP 8.4 or later with Iconv and Zlib. Both extensions are included in most PHP
-distributions. WOFF2 additionally requires the Brotli PHP extension or the `brotli` executable.
+ALTO Font requires PHP 8.4 or later with Iconv and Zlib. WOFF2 additionally
+requires the Brotli PHP extension or the `brotli` executable. Writing WOFF2
+uses an explicit compressor adapter.
 
 ## Quick Start
 
@@ -61,21 +60,22 @@ $metrics = $font->getMetrics('A');
 $outline = $font->glyphOutline($metrics->glyphId);
 ```
 
-Metrics and outlines use the font's design units. Read [Getting started](docs/getting-started.md)
-for scaling and outline inspection.
+Metrics and outlines use the font's design units. Read
+[Getting started](docs/getting-started.md) for scaling and outline inspection.
 
 ## Format Support
 
-| Format | Support |
-| --- | --- |
-| TrueType and OpenType with `glyf` outlines | Supported |
-| WOFF 1 | Supported |
-| WOFF2 | Supported, including transformed `glyf`, `loca`, and `hmtx` |
-| TTC and OTC collections | Supported with `faceIndex` |
-| Variable `glyf` fonts | Supported through `fvar`, `avar`, `gvar`, and `HVAR` |
-| CFF/CFF2 outlines, WOFF2 collections, and color glyph rendering | Not supported |
+| Format | Reading | Writing and subsetting |
+| --- | --- | --- |
+| TrueType and OpenType with `glyf` outlines | Supported | Supported |
+| WOFF 1 | Supported | Supported |
+| WOFF2 | Supported, including transformed `glyf`, `loca`, and `hmtx` | Supported with an injected Brotli compressor |
+| TTC and OTC collections | Supported with `faceIndex` | Selected faces can be extracted |
+| Variable `glyf` fonts | Supported through `fvar`, `avar`, `gvar`, and `HVAR` | Axes can be preserved while subsetting |
+| CFF/CFF2 outlines, WOFF2 collections, and color glyphs | Not supported | Not supported |
 
-Read [Font formats](docs/formats.md) for requirements, boundaries, and failure types.
+Read [Font formats](docs/formats.md) for requirements, boundaries, and failure
+types.
 
 ## Discovery
 
@@ -89,18 +89,45 @@ $finder = FontFinder::fromDirectories(__DIR__.'/fonts');
 $font = $finder->get(FontQuery::family('Inter')->weight(700)->italic());
 ```
 
-ALTO Font can search application directories, system fonts, or a custom locator. Read
-[Font discovery](docs/discovery.md) for matching and absence policies.
+ALTO Font can search application directories, system fonts, or a custom
+locator. Read [Font discovery](docs/discovery.md) for matching and absence
+policies.
 
 ## Metadata and Glyphs
 
-`FontFace` exposes structural metrics and table records. `FontDescriptor` provides names and
-CSS-like matching values, while `FontMetadata` includes optional publisher and licensing fields.
+`FontFace` exposes structural metrics and table records. `FontDescriptor`
+provides names and CSS-like matching values, while `FontMetadata` includes
+optional publisher and licensing fields.
 
-Character lookup returns a font-specific glyph identifier. From it, retrieve metrics or neutral
-contour geometry made of move, line, quadratic-curve, and close commands.
+Character lookup returns a font-specific glyph identifier. From it, retrieve
+metrics or neutral contour geometry made of move, line, quadratic-curve, and
+close commands.
 
 See [Font metadata](docs/metadata.md) and [Glyphs](docs/glyphs.md).
+
+## Writing and Subsetting
+
+Create an immutable subset and write a new WOFF2 file:
+
+```php
+use Alto\Font\Compression\BrotliExtensionCompressor;
+use Alto\Font\Subset\SubsetOptions;
+use Alto\Font\Subset\UnicodeSet;
+use Alto\Font\Writer\Woff2Writer;
+
+$subset = $font->subset(new SubsetOptions(
+    UnicodeSet::fromCss('U+0020-024F'),
+));
+
+new Woff2Writer(new BrotliExtensionCompressor())->write(
+    $subset->font,
+    __DIR__.'/fonts/inter-latin.woff2',
+);
+```
+
+Writers refuse to replace existing destinations. Compact glyph IDs, layout
+preservation, hint removal, compression profiles, and current fail-closed
+boundaries are documented in [Writing fonts](docs/writing.md).
 
 ## Variable Fonts
 
@@ -114,8 +141,8 @@ $boldCondensed = $font->withVariations([
 ```
 
 Selected coordinates affect supported glyph metrics and outlines. Read
-[Variable fonts](docs/variations.md) for axes, named instances, clamping, and observable results.
-The [complete guide](docs/index.md) links every topic.
+[Variable fonts](docs/variations.md) for axes, named instances, clamping, and
+observable results. The [complete guide](docs/index.md) links every topic.
 
 ## Contributing
 

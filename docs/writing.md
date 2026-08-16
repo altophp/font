@@ -24,6 +24,10 @@ Use `dump()` when the bytes belong in memory or another storage abstraction:
 $bytes = new SfntWriter()->dump($font);
 ```
 
+`Font::toSfnt()` is the direct convenience API for the same in-memory SFNT
+output. An unchanged standalone SFNT remains byte-for-byte identical through
+either API.
+
 Selecting variable coordinates with `withVariations()` does not yet create a
 static font instance. Writing such a selected view raises
 `UnsupportedFontException` rather than returning the original variable font
@@ -48,6 +52,10 @@ adapter requires `ext-brotli` and requests its WOFF2-specific `BROTLI_FONT`
 mode. `BrotliCompressionProfile::Fast` uses quality 5 for iterative builds;
 `Maximum` uses quality 11 for final assets.
 
+WOFF container metadata and private-data blocks are not preserved when a
+webfont is decoded and written again. Font metadata stored in SFNT tables is
+preserved according to the selected transformation policy.
+
 `BrotliProcessCompressor` is also available when only the `brotli` executable
 is installed. Both adapters avoid exposing process or extension details in the
 writer API.
@@ -55,6 +63,10 @@ writer API.
 With the process adapter, `write()` copies table and compressed data through
 temporary streams in bounded chunks. `dump()` intentionally returns one PHP
 string and therefore does not provide the same memory guarantee.
+
+Custom compressors implement `BrotliCompressorInterface`. They may additionally
+implement `BrotliStreamCompressorInterface` to provide the bounded-memory
+streaming path used by `write()`.
 
 ## Unicode subsets
 
@@ -81,6 +93,11 @@ new Woff2Writer($brotli)->write(
 );
 ```
 
+`SubsetResult` reports the requested Unicode set, mapped codepoint count,
+original and retained glyph counts, warnings, and `sfntSize`. That size is the
+materialized SFNT size; WOFF and WOFF2 sizes depend on the writer and
+compression profile.
+
 `UnicodeSet` also provides immutable `union()`, `intersect()`, and `without()`
 operations. They operate directly on normalized ranges rather than expanding
 large Unicode blocks into individual values.
@@ -94,9 +111,9 @@ through stable glyph IDs.
 `GlyphIdPolicy::Compact` is an opt-in, fail-closed mode. It currently compacts
 the core static TrueType tables, horizontal metrics, compound references, cmap,
 PostScript names, and a bounded set of GSUB, GPOS, and GDEF formats. A font
-containing variable, vertical, kerning, color, bitmap, mathematical, or another
-glyph-indexed table that is not yet rewritten is rejected instead of producing
-an invalid font.
+containing unsupported variation tables such as `VVAR` or `VARC`, vertical
+metrics, kerning, color, bitmap, mathematical, or another glyph-indexed table
+that is not yet rewritten is rejected instead of producing an invalid font.
 
 `LayoutPolicy::Drop` explicitly removes GSUB substitutions, GPOS positioning,
 and GDEF metadata. It is useful for narrowly scoped assets such as digits or

@@ -1,6 +1,6 @@
 # Installation
 
-Alto Font requires PHP 8.4 or later and the Zlib extension.
+Alto Font requires PHP 8.4 or later with the Iconv and Zlib extensions.
 
 ```bash
 composer require alto/font

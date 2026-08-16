@@ -1,7 +1,8 @@
 # Alto Font
 
-Alto Font reads font files and exposes their metadata, glyph metrics, outlines,
-and variable-font axes. It does not shape text, apply kerning, or draw glyphs.
+Alto Font reads and writes font files, exposes their metadata, glyph metrics,
+outlines, and variable-font axes, and creates conservative Unicode subsets. It
+does not shape text, apply kerning, or draw glyphs.
 
 ```php
 use Alto\Font\Font;
@@ -26,5 +27,5 @@ $advanceWidth = $font->getMetrics('A')->advanceWidth;
 - [Variations](variations.md): inspect axes and select a variable-font instance.
 - [Writing](writing.md): create standalone SFNT, WOFF, WOFF2, and conservative Unicode subsets.
 
-Alto Font reports facts stored in fonts. Text layout, fallback, bidirectional
-text, shaping, and rendering belong to higher-level packages.
+Alto Font reports and transforms font data. Text layout, fallback,
+bidirectional text, shaping, and rendering belong to higher-level packages.

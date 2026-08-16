@@ -62,8 +62,8 @@ TTF/OTF/WOFF/WOFF2 with glyf outlines
 - [x] Extract one selected TTC/OTC face as a standalone SFNT.
 - [x] Add `SfntWriter`, writing only to a destination that does not exist.
 - [x] Reload every generated font with `alto/font` in tests.
-- [ ] Validate generated fonts with an independent OpenType validator when one
-  is available in CI.
+- [x] Validate generated SFNT, WOFF, and WOFF2 fonts with OpenType Sanitizer in
+  CI.
 
 ### 2. WOFF 1 output
 
@@ -92,7 +92,7 @@ TTF/OTF/WOFF/WOFF2 with glyf outlines
 - [x] Rebuild `cmap` format 4/12, `glyf`, `loca`, and `head` loca format.
 - [x] Preserve `hmtx` and stable glyph IDs; recalculate `head` bbox, `hhea`
   advance maximum across all slots, and bearing extrema from retained contours.
-- [ ] Recalculate `maxp` geometry maxima and `OS/2` coverage. Rewrite `post`
+- [x] Recalculate `maxp` geometry maxima and `OS/2` coverage. Rewrite `post`
   format 2 only when glyph renumbering is introduced.
 - [x] Add opt-in fail-closed glyph renumbering for core static TrueType tables,
   including compound references, horizontal metrics, cmap, maxp, and post.
@@ -118,7 +118,7 @@ TTF/OTF/WOFF/WOFF2 with glyf outlines
   below a 128 MiB PHP memory limit.
 - [x] Pad the final compressed block to the four-byte boundary expected by
   browser WOFF2 decoders while excluding padding from `totalCompressedSize`.
-- [ ] Add `glyf`/`loca` and `hmtx` transforms only after null-transform output is
+- [x] Add `glyf`/`loca` and `hmtx` transforms only after null-transform output is
   independently validated.
 - [x] Validate null-transform output with CoreGraphics in addition to Alto's
   own decoder.
