@@ -12,7 +12,7 @@ the LICENSE file distributed with this source code.
 EOF;
 
 $finder = PhpCsFixer\Finder::create()
-    ->in([__DIR__.'/src', __DIR__.'/tests'])
+    ->in([__DIR__.'/src', __DIR__.'/tests', __DIR__.'/tools'])
     ->exclude('Fixtures');
 
 return (new PhpCsFixer\Config())

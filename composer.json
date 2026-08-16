@@ -56,14 +56,19 @@
         "sort-packages": true
     },
     "scripts": {
+        "check": "@qa",
         "cs": "vendor/bin/php-cs-fixer fix --dry-run --diff --sequential",
+        "cs-check": "@cs",
+        "cs-fix": "@cs:fix",
         "cs:fix": "vendor/bin/php-cs-fixer fix --sequential",
+        "phpstan": "@sa",
         "qa": [
             "@cs",
             "@sa",
             "@test"
         ],
         "sa": "vendor/bin/phpstan analyse --memory-limit=-1",
-        "test": "phpunit"
+        "test": "phpunit",
+        "validate-opentype": "php tools/validate-opentype.php"
     }
 }
