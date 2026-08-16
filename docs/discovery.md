@@ -88,3 +88,8 @@ $finder = FontFinder::fromLocator($locator);
 
 The locator yields local file paths. Loading and candidate caching remain the
 finder's responsibility.
+
+`FontFinder` evaluates the first face of a TTC or OTC candidate. Load a
+different collection face explicitly with `Font::fromFile($path, faceIndex: 1)`.
+The finder selects the best match; it is not a public font-catalog enumeration
+API.

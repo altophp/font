@@ -1,6 +1,6 @@
 {
     "name": "alto/font",
-    "description": "Font reading, metadata, writing, and Unicode subsetting for OpenType, TrueType, WOFF, and WOFF2.",
+    "description": "Font inspection, Unicode subsetting, format conversion, and WOFF2 compression for OpenType, TrueType, WOFF, and WOFF2.",
     "keywords": [
         "font",
         "opentype",

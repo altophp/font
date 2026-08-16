@@ -1,7 +1,8 @@
 # Font formats
 
 `Font::fromFile()` detects the container from its signature. The reported
-format therefore remains correct for extensionless files and in-memory data.
+format therefore remains correct when a file has no extension or a misleading
+extension.
 
 | Format | Support | Requirement or boundary |
 | --- | --- | --- |

@@ -1,7 +1,7 @@
 # ALTO Font
 
-Read, inspect, write, and subset OpenType, TrueType, WOFF, and WOFF2 font files
-from PHP.
+Inspect, subset, convert, and compress OpenType, TrueType, WOFF, and WOFF2 font
+files from PHP.
 
 &nbsp; ![PHP Version](https://img.shields.io/badge/PHP-8.4%2B-00B7FF?logoColor=00B7FF&labelColor=050608)
 &nbsp; ![CI](https://img.shields.io/github/actions/workflow/status/altophp/font/CI.yml?branch=main&label=Tests&labelColor=050608&color=00B7FF)
@@ -11,8 +11,9 @@ from PHP.
 
 ALTO Font answers what a font contains: names, descriptors, licensing metadata,
 face dimensions, character maps, glyph metrics, outlines, collections, and
-variable-font axes. It also writes supported faces and creates conservative
-Unicode subsets. It does not shape text, apply kerning, or render glyphs.
+variable-font axes. It also creates conservative Unicode subsets, converts
+supported faces between containers, and compresses WOFF2 output. It does not
+shape text, apply kerning, or render glyphs.
 
 ```php
 use Alto\Font\Font;
@@ -93,41 +94,69 @@ ALTO Font can search application directories, system fonts, or a custom
 locator. Read [Font discovery](docs/discovery.md) for matching and absence
 policies.
 
-## Metadata and Glyphs
+## Inspect Fonts
 
-`FontFace` exposes structural metrics and table records. `FontDescriptor`
-provides names and CSS-like matching values, while `FontMetadata` includes
-optional publisher and licensing fields.
+`FontFace` exposes structural metrics and table tags. `FontDescriptor` provides
+names and CSS-like matching values, while `FontMetadata` includes optional
+manufacturer, designer, vendor URL, and licensing fields.
 
 Character lookup returns a font-specific glyph identifier. From it, retrieve
 metrics or neutral contour geometry made of move, line, quadratic-curve, and
 close commands.
 
-See [Font metadata](docs/metadata.md) and [Glyphs](docs/glyphs.md).
+Start with [Inspect a font](docs/inspection.md), then continue with
+[Font metadata](docs/metadata.md) or [Glyphs](docs/glyphs.md).
 
-## Writing and Subsetting
+## Subset Fonts
 
-Create an immutable subset and write a new WOFF2 file:
+Create an immutable subset with conservative defaults:
 
 ```php
-use Alto\Font\Compression\BrotliExtensionCompressor;
 use Alto\Font\Subset\SubsetOptions;
 use Alto\Font\Subset\UnicodeSet;
-use Alto\Font\Writer\Woff2Writer;
 
 $subset = $font->subset(new SubsetOptions(
-    UnicodeSet::fromCss('U+0020-024F'),
+    UnicodeSet::fromText('Alto Font 0123456789'),
 ));
 
-new Woff2Writer(new BrotliExtensionCompressor())->write(
+echo $subset->retainedGlyphCount;
+```
+
+Read [Create a subset](docs/subsetting.md) before enabling compact glyph IDs,
+hint removal, or layout removal.
+
+## Convert Fonts
+
+Write a complete face or subset as standalone SFNT, WOFF, or WOFF2:
+
+```php
+use Alto\Font\Writer\WoffWriter;
+
+new WoffWriter()->write(
     $subset->font,
-    __DIR__.'/fonts/inter-latin.woff2',
+    __DIR__.'/fonts/alto-subset.woff',
 );
 ```
 
-Writers refuse to replace existing destinations. Compact glyph IDs, layout
-preservation, hint removal, compression profiles, and current fail-closed
-boundaries are documented in [Writing fonts](docs/writing.md).
+Writers create new destinations and refuse to replace existing files. Read
+[Convert fonts](docs/converting.md) for reconstruction and data-loss boundaries.
+
+## Compress WOFF2
+
+WOFF2 output requires an explicit Brotli adapter:
+
+```php
+use Alto\Font\Compression\BrotliExtensionCompressor;
+use Alto\Font\Writer\Woff2Writer;
+
+new Woff2Writer(new BrotliExtensionCompressor())->write(
+    $subset->font,
+    __DIR__.'/fonts/alto-subset.woff2',
+);
+```
+
+Read [Compress WOFF2](docs/woff2-compression.md) for extension, process, profile,
+and memory trade-offs.
 
 ## Variable Fonts
 

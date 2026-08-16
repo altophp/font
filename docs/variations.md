@@ -10,17 +10,17 @@ coordinates.
 $variations = $font->variations();
 
 if (null === $variations) {
-    // This is a static font.
-}
-
-foreach ($variations->axes as $axis) {
-    printf(
-        "%s: %g to %g, default %g\n",
-        $axis->tag,
-        $axis->minimum,
-        $axis->maximum,
-        $axis->default,
-    );
+    echo "This is a static font.\n";
+} else {
+    foreach ($variations->axes as $axis) {
+        printf(
+            "%s: %g to %g, default %g\n",
+            $axis->tag,
+            $axis->minimum,
+            $axis->maximum,
+            $axis->default,
+        );
+    }
 }
 ```
 
@@ -43,6 +43,10 @@ $metrics = $boldCondensed->getMetrics('A');
 `withVariations()` is immutable: the original font remains at its default
 coordinates. Values outside an axis range are clamped. Unknown axes and calls
 on static fonts raise `InvalidFontException`.
+
+The returned object is a read-only variable-font view, not a static instance.
+It cannot be written or subsetted. Call `withoutVariations()` to return to the
+variable source before those workflows.
 
 You can also build coordinates incrementally:
 
