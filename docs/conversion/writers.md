@@ -1,7 +1,7 @@
-# Convert fonts
+# Use font writers
 
 Writers keep the selected face and change its output container. They do not
-reduce the character or glyph set. Use [Create a font subset](subsetting.md)
+reduce the character or glyph set. Use [Create a font subset](../subsetting.md)
 first when the output should contain fewer glyphs.
 
 ## Write SFNT, WOFF, and WOFF2
@@ -86,5 +86,5 @@ equivalent, not necessarily byte-for-byte identical.
 These exceptions implement `FontExceptionInterface`. A selected variable view
 created with `withVariations()` cannot be written as a static font.
 
-See [Compress WOFF2](woff2-compression.md) for Brotli configuration and memory
-behavior.
+See [WOFF2 compression](../compression/woff2.md) for Brotli configuration and
+memory behavior.

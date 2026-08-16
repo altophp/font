@@ -53,5 +53,5 @@ foreach ($outline->contours as $contour) {
 The outline contains generic move, line, quadratic-curve, and close commands.
 It is geometry, not an SVG or another rendered format.
 
-Continue with [Metadata](metadata.md), [Glyphs](glyphs.md), or
-[Discovery](discovery.md), depending on the job your application performs.
+Continue with [Font basics](fonts.md), [Font files](font-files.md), or
+[Font data](font-data.md), depending on the job your application performs.

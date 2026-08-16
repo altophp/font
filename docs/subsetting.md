@@ -62,21 +62,22 @@ new WoffWriter()->write(
 );
 ```
 
-Read [Convert fonts](converting.md) for output behavior and
-[Compress WOFF2](woff2-compression.md) when the target is WOFF2.
+Read [Conversion](conversion.md) for output behavior and
+[Compression](compression.md) when the target is WOFF or WOFF2.
 
 ## Choose a different character source
 
 Use `UnicodeSet::fromText()` for application strings and translation corpora.
 Use CSS ranges, explicit codepoints, or composed ranges when the selection is
-defined independently from text. See [Build Unicode sets](unicode-sets.md).
+defined independently from text. See [Build Unicode sets](subsetting/unicode-sets.md).
 
 ## Optimize further
 
 Compact glyph IDs, hint removal, and layout removal can reduce output size but
-change more font data. See [Choose subset policies](subsetting-policies.md)
+change more font data. See [Choose subset policies](subsetting/policies.md)
 before enabling them.
 
-Subsetting currently supports TrueType `glyf` outlines. Unsupported CFF,
-color, bitmap, variation, layout, or glyph-indexed structures fail explicitly
-instead of producing a partially valid font.
+Subsetting currently supports TrueType `glyf` outlines. CFF, color, bitmap,
+and unmodeled glyph-indexed structures fail explicitly instead of producing a
+partially valid font. Supported variable and layout data follow the selected
+policies.

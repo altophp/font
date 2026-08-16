@@ -1,8 +1,8 @@
 # Alto Font
 
-Alto Font reads and writes font files, exposes their metadata, glyph metrics,
-outlines, and variable-font axes, and creates conservative Unicode subsets. It
-does not shape text, apply kerning, or draw glyphs.
+Alto Font loads font files, exposes their data, converts supported formats,
+compresses webfont output, and creates Unicode subsets. It does not shape text,
+apply kerning, or draw glyphs.
 
 ```php
 use Alto\Font\Font;
@@ -18,28 +18,32 @@ $advanceWidth = $font->getMetrics('A')->advanceWidth;
 - [Installation](installation.md): install the package and check its runtime requirements.
 - [Getting started](getting-started.md): load a font and inspect one glyph.
 
-## Inspect fonts
+## Fonts
 
-- [Inspect a font](inspection.md): choose the API that answers a metadata or structure question.
+- [Font basics](fonts.md): distinguish families, faces, files, containers, outlines, characters, and glyphs.
 - [Formats](formats.md): understand containers, outlines, collections, and runtime requirements.
+- [Font files](font-files.md): load a known file or find a matching font.
 - [Discovery](discovery.md): find the best matching font in directories or the operating system.
+- [Font data](font-data.md): choose the API that answers a structure or content question.
 - [Metadata](metadata.md): inspect names, descriptors, dimensions, and licensing fields.
 - [Glyphs](glyphs.md): resolve characters to glyphs and read metrics and outlines.
 - [Variations](variations.md): inspect axes and select a variable-font view.
 
-## Subset fonts
+## Conversion
 
-- [Create a subset](subsetting.md): keep the characters needed by an application.
-- [Unicode sets](unicode-sets.md): select text, codepoints, ranges, and CSS unicode ranges.
-- [Subset policies](subsetting-policies.md): control glyph IDs, hinting, layout, and variable data.
+- [Convert fonts](conversion.md): choose an output container and understand what conversion changes.
+- [Writers](conversion/writers.md): write standalone SFNT, WOFF, and WOFF2 files.
 
-## Convert fonts
+## Compression
 
-- [Convert fonts](converting.md): write standalone SFNT, WOFF, and WOFF2 files.
+- [Compress fonts](compression.md): understand SFNT, WOFF, and WOFF2 compression behavior.
+- [WOFF2](compression/woff2.md): choose a Brotli adapter and compression profile.
 
-## Compress fonts
+## Subsetting
 
-- [Compress WOFF2](woff2-compression.md): choose a Brotli adapter and compression profile.
+- [Create subset](subsetting.md): keep the characters needed by an application.
+- [Unicode sets](subsetting/unicode-sets.md): select text, codepoints, ranges, and CSS unicode ranges.
+- [Policies](subsetting/policies.md): control glyph IDs, hinting, layout, and variable data.
 
 Alto Font reports and transforms font data. Text layout, fallback,
 bidirectional text, shaping, and rendering belong to higher-level packages.

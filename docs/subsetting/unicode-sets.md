@@ -60,4 +60,4 @@ whether the set contains none. Iterating over a `UnicodeSet` yields individual
 codepoints and therefore expands the selected ranges during iteration.
 
 Pass the finished set to `SubsetOptions` as shown in
-[Create a font subset](subsetting.md).
+[Create a font subset](../subsetting.md).

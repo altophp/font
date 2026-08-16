@@ -61,14 +61,18 @@ final class DocumentationTest extends TestCase
         }
     }
 
-    public function testIndexSeparatesTheFourPublicWorkflows(): void
+    public function testIndexSeparatesThePublicDocumentationDomains(): void
     {
         $index = file_get_contents(__DIR__ . '/../../docs/index.md');
         self::assertIsString($index);
-        self::assertStringContainsString('## Inspect fonts', $index);
-        self::assertStringContainsString('## Subset fonts', $index);
-        self::assertStringContainsString('## Convert fonts', $index);
-        self::assertStringContainsString('## Compress fonts', $index);
+        self::assertStringContainsString('## Fonts', $index);
+        self::assertStringContainsString('## Conversion', $index);
+        self::assertStringContainsString('## Compression', $index);
+        self::assertStringContainsString('## Subsetting', $index);
+        self::assertMatchesRegularExpression(
+            '/## Fonts.*## Conversion.*## Compression.*## Subsetting/s',
+            $index,
+        );
     }
 
     /**
