@@ -20,7 +20,9 @@ use Alto\Font\Compression\BrotliStreamCompressorInterface;
 use Alto\Font\Exception\FontWriteException;
 use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\Font;
+use Alto\Font\Glyph\GlyphId;
 use Alto\Font\OpenType\Woff2KnownTags;
+use Alto\Font\OpenType\Woff2TransformEncoder;
 use Alto\Font\Tests\Fixtures\TinyTrueTypeFont;
 use Alto\Font\Writer\ExclusiveFileWriter;
 use Alto\Font\Writer\Woff2Writer;
@@ -29,6 +31,7 @@ use PHPUnit\Framework\TestCase;
 
 #[CoversClass(Woff2Writer::class)]
 #[CoversClass(Woff2KnownTags::class)]
+#[CoversClass(Woff2TransformEncoder::class)]
 #[CoversClass(ExclusiveFileWriter::class)]
 final class Woff2WriterTest extends TestCase
 {
@@ -39,7 +42,7 @@ final class Woff2WriterTest extends TestCase
         }
     }
 
-    public function testItDumpsAReloadableNullTransformWoff2Container(): void
+    public function testItDumpsAReloadableTransformedWoff2Container(): void
     {
         $source = self::temporaryPath('source.ttf');
         TinyTrueTypeFont::write($source);
@@ -51,8 +54,113 @@ final class Woff2WriterTest extends TestCase
         self::assertSame('wOF2', substr($woff2, 0, 4));
         self::assertSame(\strlen($woff2), $reader->uint32(8));
         self::assertSame(0, \strlen($woff2) % 4);
-        self::assertSame(\strlen($font->toSfnt()), $reader->uint32(16));
+        $destination = Font::fromFile(self::writeDump($woff2));
+        self::assertSame(\strlen($destination->toSfnt()), $reader->uint32(16));
+        self::assertSame('Atelier Tiny', $destination->getDescriptor()->family);
+        self::assertSame(600, $destination->glyphMetrics(new GlyphId(1))->advanceWidth);
+        self::assertCount(1, $destination->glyphOutline(new GlyphId(1))->contours);
+        self::assertCount(1, $destination->glyphOutline(new GlyphId(4))->contours);
+
+        $entries = self::woff2Entries($woff2);
+        $glyfIndex = array_search('glyf', array_column($entries, 'tag'), true);
+        self::assertIsInt($glyfIndex);
+        self::assertSame(0, $entries[$glyfIndex]['transformVersion']);
+        self::assertNotNull($entries[$glyfIndex]['transformLength']);
+        self::assertSame('loca', $entries[$glyfIndex + 1]['tag']);
+        self::assertSame(0, $entries[$glyfIndex + 1]['transformVersion']);
+        self::assertSame(0, $entries[$glyfIndex + 1]['transformLength']);
+
+        $sourceTables = self::sfntTables($font->toSfnt());
+        self::assertSame(\strlen($sourceTables['glyf']), $entries[$glyfIndex]['originalLength']);
+        self::assertSame(\strlen($sourceTables['loca']), $entries[$glyfIndex + 1]['originalLength']);
+
+        $hmtxEntries = array_values(array_filter($entries, static fn(array $entry): bool => 'hmtx' === $entry['tag']));
+        self::assertCount(1, $hmtxEntries);
+        self::assertSame(1, $hmtxEntries[0]['transformVersion']);
+        self::assertSame(\strlen($sourceTables['hmtx']), $hmtxEntries[0]['originalLength']);
+        self::assertNotNull($hmtxEntries[0]['transformLength']);
+    }
+
+    public function testItReportsTheExactReconstructedSfntSizeForInter(): void
+    {
+        $font = Font::fromFile(__DIR__ . '/../Fixtures/Fonts/Inter-Regular-latin.woff2');
+        $woff2 = new Woff2Writer(new BrotliProcessCompressor())->dump($font);
+        $reader = new BinaryReader($woff2, 'Inter WOFF2');
+        $reconstructed = Font::fromFile(self::writeDump($woff2))->toSfnt();
+
+        self::assertSame(0, self::woff2Entries($woff2)[self::woff2EntryIndex($woff2, 'glyf')]['transformVersion']);
+        self::assertSame(\strlen($reconstructed), $reader->uint32(16));
+    }
+
+    public function testItRoundTripsCompositeGlyphInstructionsThroughTheTransform(): void
+    {
+        $source = self::temporaryPath('hinted-composite.ttf');
+        TinyTrueTypeFont::writeCompoundWithInstructions($source);
+        $font = Font::fromFile($source);
+
+        $woff2 = new Woff2Writer(new BrotliProcessCompressor())->dump($font);
+        $destination = Font::fromFile(self::writeDump($woff2));
+
+        self::assertEquals($font->glyphMetrics(new GlyphId(4)), $destination->glyphMetrics(new GlyphId(4)));
+        self::assertEquals($font->glyphOutline(new GlyphId(4)), $destination->glyphOutline(new GlyphId(4)));
+        self::assertSame(0, self::woff2Entries($woff2)[self::woff2EntryIndex($woff2, 'glyf')]['transformVersion']);
+    }
+
+    public function testItUsesNullGlyfAndLocaTransformsForUnsupportedCubicPoints(): void
+    {
+        $source = self::temporaryPath('cubic.ttf');
+        TinyTrueTypeFont::writeWithCubicPoint($source);
+
+        $woff2 = new Woff2Writer(new BrotliProcessCompressor())->dump(Font::fromFile($source));
+        $entries = self::woff2Entries($woff2);
+
+        self::assertSame(3, $entries[self::woff2EntryIndex($woff2, 'glyf')]['transformVersion']);
+        self::assertSame(3, $entries[self::woff2EntryIndex($woff2, 'loca')]['transformVersion']);
         self::assertSame('Atelier Tiny', Font::fromFile(self::writeDump($woff2))->getDescriptor()->family);
+    }
+
+    public function testItKeepsTheGlyfTransformWithinShortLocaBounds(): void
+    {
+        $source = self::temporaryPath('expanding-short-loca.ttf');
+        TinyTrueTypeFont::writeWithExpandingShortLoca($source);
+
+        $woff2 = new Woff2Writer(new BrotliProcessCompressor())->dump(Font::fromFile($source));
+        $entries = self::woff2Entries($woff2);
+
+        self::assertSame(0, $entries[self::woff2EntryIndex($woff2, 'glyf')]['transformVersion']);
+        self::assertSame(0, $entries[self::woff2EntryIndex($woff2, 'loca')]['transformVersion']);
+        self::assertSame('Atelier Tiny', Font::fromFile(self::writeDump($woff2))->getDescriptor()->family);
+    }
+
+    public function testItUsesNullTransformsForAZeroContourGlyphWithData(): void
+    {
+        $source = self::temporaryPath('zero-contour-data.ttf');
+        TinyTrueTypeFont::writeWithZeroContourGlyphData($source);
+
+        $woff2 = new Woff2Writer(new BrotliProcessCompressor())->dump(Font::fromFile($source));
+
+        self::assertSame(3, self::woff2Entries($woff2)[self::woff2EntryIndex($woff2, 'glyf')]['transformVersion']);
+        self::assertSame(3, self::woff2Entries($woff2)[self::woff2EntryIndex($woff2, 'loca')]['transformVersion']);
+        self::assertSame('Atelier Tiny', Font::fromFile(self::writeDump($woff2))->getDescriptor()->family);
+    }
+
+    public function testItUsesNullTransformsForUnexpectedTrailingGlyphData(): void
+    {
+        $writers = [
+            TinyTrueTypeFont::writeWithTrailingSimpleGlyphData(...),
+            TinyTrueTypeFont::writeWithTrailingCompositeGlyphData(...),
+        ];
+
+        foreach ($writers as $write) {
+            $source = self::temporaryPath('trailing-glyph-data.ttf');
+            $write($source);
+
+            $woff2 = new Woff2Writer(new BrotliProcessCompressor())->dump(Font::fromFile($source));
+
+            self::assertSame(3, self::woff2Entries($woff2)[self::woff2EntryIndex($woff2, 'glyf')]['transformVersion']);
+            self::assertSame(3, self::woff2Entries($woff2)[self::woff2EntryIndex($woff2, 'loca')]['transformVersion']);
+            self::assertSame('Atelier Tiny', Font::fromFile(self::writeDump($woff2))->getDescriptor()->family);
+        }
     }
 
     public function testItWritesANewWoff2File(): void
@@ -178,5 +286,60 @@ final class Woff2WriterTest extends TestCase
         }
 
         return $tables;
+    }
+
+    /**
+     * @return list<array{tag: string, originalLength: int, transformLength: ?int, transformVersion: int}>
+     */
+    private static function woff2Entries(string $woff2): array
+    {
+        $reader = new BinaryReader($woff2, 'test WOFF2 directory');
+        $cursor = 48;
+        $entries = [];
+
+        for ($index = 0; $index < $reader->uint16(12); ++$index) {
+            $flags = $reader->uint8($cursor++);
+            $tagIndex = $flags & 0x3F;
+            $tag = 0x3F === $tagIndex ? $reader->string($cursor, 4) : Woff2KnownTags::at($tagIndex);
+
+            if (0x3F === $tagIndex) {
+                $cursor += 4;
+            }
+
+            $transformVersion = $flags >> 6;
+            $originalLength = self::readUIntBase128($reader, $cursor);
+            $transformed = \in_array($tag, ['glyf', 'loca'], true) ? 3 !== $transformVersion : 0 !== $transformVersion;
+            $entries[] = [
+                'tag' => $tag,
+                'originalLength' => $originalLength,
+                'transformLength' => $transformed ? self::readUIntBase128($reader, $cursor) : null,
+                'transformVersion' => $transformVersion,
+            ];
+        }
+
+        return $entries;
+    }
+
+    private static function woff2EntryIndex(string $woff2, string $tag): int
+    {
+        $index = array_search($tag, array_column(self::woff2Entries($woff2), 'tag'), true);
+
+        if (!\is_int($index)) {
+            self::fail(\sprintf('WOFF2 table "%s" was not found.', $tag));
+        }
+
+        return $index;
+    }
+
+    private static function readUIntBase128(BinaryReader $reader, int &$cursor): int
+    {
+        $value = 0;
+
+        do {
+            $byte = $reader->uint8($cursor++);
+            $value = ($value << 7) | ($byte & 0x7F);
+        } while (0 !== ($byte & 0x80));
+
+        return $value;
     }
 }

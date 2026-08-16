@@ -25,6 +25,9 @@ enum FontFormat: string
     case TrueTypeCollection = 'truetype-collection';
     case Unknown = 'unknown';
 
+    /**
+     * @internal
+     */
     public static function fromSignature(string $signature): self
     {
         return match ($signature) {

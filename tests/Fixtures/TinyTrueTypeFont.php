@@ -31,6 +31,70 @@ final class TinyTrueTypeFont
         file_put_contents($path, self::sfnt($tables));
     }
 
+    public static function writeWithOs2(string $path): void
+    {
+        $tables = self::tables(compoundCycle: false, unsupportedCff: false);
+        $tables['OS/2'] = self::os2();
+        ksort($tables);
+
+        file_put_contents($path, self::sfnt($tables));
+    }
+
+    public static function writeWithCubicPoint(string $path): void
+    {
+        $glyph = self::simpleGlyph([[100, 0], [300, 700], [500, 0]]);
+        $glyph[14] = \chr(\ord($glyph[14]) | 0x80);
+
+        file_put_contents($path, self::sfnt(self::tables(
+            compoundCycle: false,
+            unsupportedCff: false,
+            firstGlyph: $glyph,
+        )));
+    }
+
+    public static function writeWithExpandingShortLoca(string $path): void
+    {
+        file_put_contents($path, self::sfnt(self::tables(
+            compoundCycle: false,
+            unsupportedCff: false,
+            firstGlyph: self::repeatedPointGlyph(26200),
+            shortLoca: true,
+        )));
+    }
+
+    public static function writeWithZeroContourGlyphData(string $path): void
+    {
+        $glyph = self::i16(0) . str_repeat("\0", 8) . self::u16(1) . "\xB0";
+
+        file_put_contents($path, self::sfnt(self::tables(
+            compoundCycle: false,
+            unsupportedCff: false,
+            firstGlyph: $glyph,
+        )));
+    }
+
+    public static function writeWithTrailingSimpleGlyphData(string $path): void
+    {
+        $glyph = self::simpleGlyph([[100, 0], [300, 700], [500, 0]]) . "\xA5";
+
+        file_put_contents($path, self::sfnt(self::tables(
+            compoundCycle: false,
+            unsupportedCff: false,
+            firstGlyph: $glyph,
+        )));
+    }
+
+    public static function writeWithTrailingCompositeGlyphData(string $path): void
+    {
+        $glyph = self::compoundGlyph(1, 50, 0) . "\xA5";
+
+        file_put_contents($path, self::sfnt(self::tables(
+            compoundCycle: false,
+            unsupportedCff: false,
+            compoundGlyph: $glyph,
+        )));
+    }
+
     public static function writeWithGsubSingleSubstitution(string $path): void
     {
         self::writeWithGsub($path, self::gsub(1, self::singleSubstitution(1, 2)));
@@ -400,10 +464,12 @@ final class TinyTrueTypeFont
         bool $pointMatched = false,
         int $unitsPerEm = 1000,
         ?string $compoundGlyph = null,
+        ?string $firstGlyph = null,
+        bool $shortLoca = false,
     ): array {
         $glyphs = [
             '',
-            self::simpleGlyph([[100, 0], [300, 700], [500, 0]]),
+            $firstGlyph ?? self::simpleGlyph([[100, 0], [300, 700], [500, 0]]),
             self::simpleGlyph([[100, 700], [300, 0], [500, 700]]),
             self::simpleGlyph([[80, 0], [80, 700], [420, 700], [420, 0]]),
             $compoundGlyph ?? match (true) {
@@ -426,10 +492,10 @@ final class TinyTrueTypeFont
         $tables = [
             'cmap' => self::cmap(),
             'glyf' => $glyf,
-            'head' => self::head($unitsPerEm),
+            'head' => self::head($unitsPerEm, $shortLoca ? 0 : 1),
             'hhea' => self::hhea(),
             'hmtx' => self::hmtx(),
-            'loca' => self::loca($loca),
+            'loca' => self::loca($loca, $shortLoca),
             'maxp' => self::maxp(),
             'name' => self::name(),
         ];
@@ -621,22 +687,22 @@ final class TinyTrueTypeFont
     /**
      * @param list<int> $offsets
      */
-    private static function loca(array $offsets): string
+    private static function loca(array $offsets, bool $short = false): string
     {
         $data = '';
 
         foreach ($offsets as $offset) {
-            $data .= self::u32($offset);
+            $data .= $short ? self::u16(intdiv($offset, 2)) : self::u32($offset);
         }
 
         return $data;
     }
 
-    private static function head(int $unitsPerEm = 1000): string
+    private static function head(int $unitsPerEm = 1000, int $indexFormat = 1): string
     {
         $data = str_repeat("\0", 54);
         self::put($data, 18, self::u16($unitsPerEm));
-        self::put($data, 50, self::i16(1));
+        self::put($data, 50, self::i16($indexFormat));
 
         return $data;
     }
@@ -671,7 +737,18 @@ final class TinyTrueTypeFont
 
     private static function maxp(): string
     {
-        return "\x00\x01\x00\x00".self::u16(5);
+        return "\x00\x01\x00\x00".self::u16(5).str_repeat("\0", 26);
+    }
+
+    private static function os2(): string
+    {
+        $data = str_repeat("\0", 96);
+        self::put($data, 0, self::u16(4));
+        self::put($data, 42, str_repeat("\xFF", 16));
+        self::put($data, 64, self::u16(0));
+        self::put($data, 66, self::u16(0xFFFF));
+
+        return $data;
     }
 
     private static function name(): string
@@ -1000,6 +1077,23 @@ final class TinyTrueTypeFont
             .$flags
             .$xCoordinates
             .$yCoordinates;
+    }
+
+    private static function repeatedPointGlyph(int $pointCount): string
+    {
+        $flags = '';
+
+        for ($remaining = $pointCount; $remaining > 0;) {
+            $runLength = min($remaining, 256);
+            $flags .= $runLength > 1 ? "\x39" . \chr($runLength - 1) : "\x31";
+            $remaining -= $runLength;
+        }
+
+        return self::i16(1)
+            . str_repeat("\0", 8)
+            . self::u16($pointCount - 1)
+            . self::u16(0)
+            . $flags;
     }
 
     private static function compoundGlyph(

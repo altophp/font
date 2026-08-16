@@ -132,13 +132,31 @@ final readonly class GlyfSubsetter
             $subsetGlyphOffsets,
             $retained,
         );
+
+        if (HintingPolicy::Drop === $options->hinting) {
+            $maxp = TrueTypeHintingStripper::stripMaxp($maxp);
+        }
+
+        $maxp = TrueTypeMaxpRecalculator::recalculate(
+            $maxp,
+            $subsetGlyf,
+            $subsetGlyphOffsets,
+            $retained,
+        );
         $replacements = [
             'cmap' => CmapBuilder::build($mappings),
             'glyf' => $subsetGlyf,
             'head' => $metrics['head'],
             'hhea' => $metrics['hhea'],
             'loca' => $subsetLoca,
+            'maxp' => $maxp,
         ];
+
+        $os2 = $document->table('OS/2');
+
+        if (null !== $os2) {
+            $replacements['OS/2'] = Os2CoverageRecalculator::recalculate($os2, $mappings);
+        }
         $removedTables = match ($options->layout) {
             LayoutPolicy::Preserve => [],
             LayoutPolicy::SubstitutionsOnly => ['GPOS'],
@@ -152,15 +170,10 @@ final readonly class GlyfSubsetter
         }
 
         if (HintingPolicy::Drop === $options->hinting) {
-            $replacements['maxp'] = TrueTypeHintingStripper::stripMaxp($maxp);
             $removedTables = [...$removedTables, ...self::HINTING_TABLES];
         }
 
         $warnings = [];
-
-        if (null !== $document->table('OS/2')) {
-            $warnings[] = 'OS/2 Unicode range bits are preserved and may overstate the subset coverage.';
-        }
 
         if (LayoutPolicy::Drop === $options->layout && (null !== $gsub || null !== $document->table('GPOS') || null !== $document->table('GDEF'))) {
             $warnings[] = 'OpenType layout tables GSUB, GPOS, and GDEF were removed explicitly.';

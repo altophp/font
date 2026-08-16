@@ -26,7 +26,7 @@ final readonly class SubsetResult
         public int $mappedCodepointCount,
         public int $originalGlyphCount,
         public int $retainedGlyphCount,
-        public int $outputSize,
+        public int $sfntSize,
         public array $warnings = [],
     ) {}
 }

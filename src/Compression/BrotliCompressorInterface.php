@@ -15,5 +15,10 @@ namespace Alto\Font\Compression;
 
 interface BrotliCompressorInterface
 {
+    /**
+     * Returns one raw Brotli stream for the supplied WOFF2 table data.
+     *
+     * The result must not include a WOFF2 header, length prefix, or padding.
+     */
     public function compress(string $data): string;
 }

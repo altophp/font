@@ -232,16 +232,19 @@ final class FontTest extends TestCase
         self::assertSame('M 100 0 L 300 700 L 500 0 L 100 0 Z', self::describeContour($result->font->glyphOutline(new GlyphId(1))->contours[0]));
         self::assertSame(600, $result->font->getMetrics('A')->advanceWidth);
         self::assertNull($result->font->glyphIdForCodepoint(86));
-        self::assertSame(\strlen($result->font->toSfnt()), $result->outputSize);
+        self::assertSame(\strlen($result->font->toSfnt()), $result->sfntSize);
         self::assertSame(FontFormat::TrueType, $result->font->face()->format);
         self::assertSame(FontFormat::TrueType, $result->font->metadata()->format);
 
         $head = $result->font->sfntDocument()->table('head');
         $hhea = $result->font->sfntDocument()->table('hhea');
+        $maxp = $result->font->sfntDocument()->table('maxp');
         self::assertNotNull($head);
         self::assertNotNull($hhea);
+        self::assertNotNull($maxp);
         $headReader = new BinaryReader($head, 'subset head');
         $hheaReader = new BinaryReader($hhea, 'subset hhea');
+        $maxpReader = new BinaryReader($maxp, 'subset maxp');
         self::assertSame([100, 0, 500, 700], [
             $headReader->int16(36),
             $headReader->int16(38),
@@ -253,6 +256,15 @@ final class FontTest extends TestCase
             $hheaReader->int16(12),
             $hheaReader->int16(14),
             $hheaReader->int16(16),
+        ]);
+        self::assertSame([5, 3, 1, 0, 0, 0, 0], [
+            $maxpReader->uint16(4),
+            $maxpReader->uint16(6),
+            $maxpReader->uint16(8),
+            $maxpReader->uint16(10),
+            $maxpReader->uint16(12),
+            $maxpReader->uint16(28),
+            $maxpReader->uint16(30),
         ]);
     }
 
@@ -270,11 +282,59 @@ final class FontTest extends TestCase
         self::assertSame(2, $compact->font->face()->glyphCount);
         self::assertSame(1, $compact->font->glyphIdForCodepoint(65)?->value);
         self::assertSame('M 100 0 L 300 700 L 500 0 L 100 0 Z', self::describeContour($compact->font->glyphOutline(new GlyphId(1))->contours[0]));
-        self::assertLessThan($preserved->outputSize, $compact->outputSize);
+        self::assertLessThan($preserved->sfntSize, $compact->sfntSize);
         self::assertContains(
             'Glyph IDs were compacted and PostScript glyph names were removed when present.',
             $compact->warnings,
         );
+        $maxp = $compact->font->sfntDocument()->table('maxp');
+        self::assertNotNull($maxp);
+        $maxpReader = new BinaryReader($maxp, 'compact subset maxp');
+        self::assertSame([2, 3, 1, 0, 0, 0, 0], [
+            $maxpReader->uint16(4),
+            $maxpReader->uint16(6),
+            $maxpReader->uint16(8),
+            $maxpReader->uint16(10),
+            $maxpReader->uint16(12),
+            $maxpReader->uint16(28),
+            $maxpReader->uint16(30),
+        ]);
+    }
+
+    #[DataProvider('glyphIdPolicies')]
+    public function testItRecalculatesOs2CoverageForEveryGlyphIdPolicy(GlyphIdPolicy $glyphIds): void
+    {
+        $path = self::temporaryPath('os2.ttf');
+        TinyTrueTypeFont::writeWithOs2($path);
+
+        $result = Font::fromFile($path)->subset(new SubsetOptions(
+            UnicodeSet::fromText('A'),
+            glyphIds: $glyphIds,
+        ));
+        $os2 = $result->font->sfntDocument()->table('OS/2');
+        self::assertNotNull($os2);
+        $reader = new BinaryReader($os2, 'subset OS/2');
+
+        self::assertSame([1, 0, 0, 0], [
+            $reader->uint32(42),
+            $reader->uint32(46),
+            $reader->uint32(50),
+            $reader->uint32(54),
+        ]);
+        self::assertSame([0x0041, 0x0041], [$reader->uint16(64), $reader->uint16(66)]);
+        self::assertNotContains(
+            'OS/2 Unicode range bits are preserved and may overstate the subset coverage.',
+            $result->warnings,
+        );
+    }
+
+    /**
+     * @return iterable<string, array{GlyphIdPolicy}>
+     */
+    public static function glyphIdPolicies(): iterable
+    {
+        yield 'preserved glyph IDs' => [GlyphIdPolicy::Preserve];
+        yield 'compact glyph IDs' => [GlyphIdPolicy::Compact];
     }
 
     public function testItRemapsCompoundGlyphComponentsWhileCompacting(): void

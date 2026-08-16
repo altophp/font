@@ -17,6 +17,7 @@ use Alto\Font\Compression\BrotliCompressorInterface;
 use Alto\Font\Compression\BrotliExtensionCompressor;
 use Alto\Font\Exception\CompressionException;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\TestCase;
 
 #[CoversClass(BrotliExtensionCompressor::class)]
@@ -39,12 +40,9 @@ final class BrotliExtensionCompressorTest extends TestCase
         new BrotliExtensionCompressor()->compress('Alto');
     }
 
+    #[RequiresPhpExtension('brotli')]
     public function testItCompressesWithTheExtensionWhenAvailable(): void
     {
-        if (!\function_exists('brotli_compress') || !\function_exists('brotli_uncompress') || !\defined('BROTLI_FONT')) {
-            self::markTestSkipped('This environment does not provide ext-brotli.');
-        }
-
         $data = str_repeat('Alto Font ', 1000);
         $compressed = new BrotliExtensionCompressor()->compress($data);
 

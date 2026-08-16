@@ -80,8 +80,6 @@ final readonly class GlyfCompactor
         }
 
         $head = substr_replace($head, self::uint16(1), 50, 2);
-        $maxp = substr_replace($maxp, self::uint16(\count($glyphIds)), 4, 2);
-
         if (HintingPolicy::Drop === $hinting) {
             $maxp = TrueTypeHintingStripper::stripMaxp($maxp);
         }
@@ -100,6 +98,12 @@ final readonly class GlyfCompactor
             $newOffsets,
             $allGlyphs,
         );
+        $maxp = TrueTypeMaxpRecalculator::recalculate(
+            $maxp,
+            $glyf,
+            $newOffsets,
+            $allGlyphs,
+        );
         $remappedUnicode = [];
 
         foreach ($unicodeMappings as $codepoint => $oldGlyphId) {
@@ -112,6 +116,8 @@ final readonly class GlyfCompactor
             $remappedUnicode[$codepoint] = $newGlyphId;
         }
 
+        $os2 = $document->table('OS/2');
+
         $replacements = [
             'cmap' => CmapBuilder::build($remappedUnicode),
             'glyf' => $glyf,
@@ -121,6 +127,10 @@ final readonly class GlyfCompactor
             'loca' => $loca,
             'maxp' => $maxp,
         ];
+
+        if (null !== $os2) {
+            $replacements['OS/2'] = Os2CoverageRecalculator::recalculate($os2, $remappedUnicode);
+        }
         $post = $document->table('post');
 
         if (null !== $post) {
@@ -220,10 +230,6 @@ final readonly class GlyfCompactor
             if (null !== $document->table('GDEF')) {
                 $warnings[] = 'GDEF glyph definitions were compacted with remapped glyph IDs.';
             }
-        }
-
-        if (null !== $document->table('OS/2')) {
-            $warnings[] = 'OS/2 Unicode range bits are preserved and may overstate the subset coverage.';
         }
 
         if (null !== $document->table('fvar')) {

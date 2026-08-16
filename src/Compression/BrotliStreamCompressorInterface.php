@@ -16,6 +16,11 @@ namespace Alto\Font\Compression;
 interface BrotliStreamCompressorInterface extends BrotliCompressorInterface
 {
     /**
+     * Compresses from the input's current position through EOF and writes the
+     * raw Brotli stream at the output's current position.
+     *
+     * Implementations must leave both streams open and must not rewind them.
+     *
      * @param resource $input
      * @param resource $output
      */

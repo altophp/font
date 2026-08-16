@@ -22,6 +22,7 @@ use Alto\Font\Font;
 use Alto\Font\OpenType\SfntBuilder;
 use Alto\Font\OpenType\SfntDocument;
 use Alto\Font\OpenType\Woff2KnownTags;
+use Alto\Font\OpenType\Woff2TransformEncoder;
 
 final readonly class Woff2Writer
 {
@@ -32,10 +33,11 @@ final readonly class Woff2Writer
     public function dump(Font $font): string
     {
         $document = self::prepareDocument($font);
-        [$tags, $directory, $totalSfntSize] = self::buildDirectory($document);
+        [$tags, $entries] = Woff2TransformEncoder::encode($document);
+        [$directory, $totalSfntSize] = self::buildDirectory($tags, $entries);
         $tableData = '';
 
-        foreach (self::tableChunks($document, $tags) as $chunk) {
+        foreach (self::tableChunks($tags, $entries) as $chunk) {
             $tableData .= $chunk;
         }
 
@@ -58,7 +60,8 @@ final readonly class Woff2Writer
         }
 
         $document = self::prepareDocument($font);
-        [$tags, $directory, $totalSfntSize] = self::buildDirectory($document);
+        [$tags, $entries] = Woff2TransformEncoder::encode($document);
+        [$directory, $totalSfntSize] = self::buildDirectory($tags, $entries);
         $input = tmpfile();
 
         if (false === $input) {
@@ -74,7 +77,7 @@ final readonly class Woff2Writer
         }
 
         try {
-            self::writeStream($input, self::tableChunks($document, $tags));
+            self::writeStream($input, self::tableChunks($tags, $entries));
 
             if (!rewind($input)) {
                 throw new CompressionException('Unable to prepare the WOFF2 input stream.');
@@ -126,56 +129,67 @@ final readonly class Woff2Writer
     }
 
     /**
-     * @return array{list<string>, string, int}
+     * @param list<string>                                                                        $tags
+     * @param array<string, array{data: string, originalLength: int, reconstructedLength: int, transformVersion: int}> $entries
+     *
+     * @return array{string, int}
      */
-    private static function buildDirectory(SfntDocument $document): array
+    private static function buildDirectory(array $tags, array $entries): array
     {
-        $tags = $document->tableTags();
         $directory = '';
         $totalSfntSize = 12 + \count($tags) * 16;
 
         foreach ($tags as $tag) {
-            $table = $document->table($tag);
+            $entry = $entries[$tag] ?? null;
 
-            if (null === $table) {
+            if (null === $entry) {
                 throw new InvalidFontException(\sprintf('SFNT table "%s" disappeared while writing WOFF2.', $tag));
             }
 
-            $length = \strlen($table);
             $tagIndex = Woff2KnownTags::indexOf($tag);
 
             if (null === $tagIndex) {
-                $directory .= chr(0x3F) . $tag;
+                $directory .= chr((($entry['transformVersion'] << 6) | 0x3F) & 0xFF) . $tag;
             } else {
-                $transformVersion = \in_array($tag, ['glyf', 'loca'], true) ? 3 : 0;
-                $directory .= chr((($transformVersion << 6) | $tagIndex) & 0xFF);
+                $directory .= chr((($entry['transformVersion'] << 6) | $tagIndex) & 0xFF);
             }
 
-            $directory .= self::uintBase128($length);
-            $totalSfntSize += ($length + 3) & ~3;
+            $directory .= self::uintBase128($entry['originalLength']);
+
+            if (self::isTransformed($tag, $entry['transformVersion'])) {
+                $directory .= self::uintBase128(\strlen($entry['data']));
+            }
+
+            $totalSfntSize += ($entry['reconstructedLength'] + 3) & ~3;
         }
 
-        return [$tags, $directory, $totalSfntSize];
+        return [$directory, $totalSfntSize];
     }
 
     /**
-     * @param list<string> $tags
+     * @param list<string>                                                                        $tags
+     * @param array<string, array{data: string, originalLength: int, reconstructedLength: int, transformVersion: int}> $entries
      *
      * @return \Generator<int, string>
      */
-    private static function tableChunks(SfntDocument $document, array $tags): \Generator
+    private static function tableChunks(array $tags, array $entries): \Generator
     {
         foreach ($tags as $tag) {
-            $table = $document->table($tag);
+            $entry = $entries[$tag] ?? null;
 
-            if (null === $table) {
+            if (null === $entry) {
                 throw new InvalidFontException(\sprintf('SFNT table "%s" disappeared while writing WOFF2.', $tag));
             }
 
-            for ($offset = 0, $length = \strlen($table); $offset < $length; $offset += self::CHUNK_SIZE) {
-                yield substr($table, $offset, min(self::CHUNK_SIZE, $length - $offset));
+            for ($offset = 0, $length = \strlen($entry['data']); $offset < $length; $offset += self::CHUNK_SIZE) {
+                yield substr($entry['data'], $offset, min(self::CHUNK_SIZE, $length - $offset));
             }
         }
+    }
+
+    private static function isTransformed(string $tag, int $transformVersion): bool
+    {
+        return \in_array($tag, ['glyf', 'loca'], true) ? 3 !== $transformVersion : 0 !== $transformVersion;
     }
 
     /**

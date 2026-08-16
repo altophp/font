@@ -26,6 +26,13 @@ use Alto\Font\Exception\UnsupportedFontException;
 final class Woff2Decoder
 {
     private const int ARG_1_AND_2_ARE_WORDS = 0x0001;
+    private const int ON_CURVE_POINT = 0x01;
+    private const int X_SHORT_VECTOR = 0x02;
+    private const int Y_SHORT_VECTOR = 0x04;
+    private const int REPEAT_FLAG = 0x08;
+    private const int X_IS_SAME_OR_POSITIVE_X_SHORT_VECTOR = 0x10;
+    private const int Y_IS_SAME_OR_POSITIVE_Y_SHORT_VECTOR = 0x20;
+    private const int OVERLAP_SIMPLE = 0x40;
     private const int MORE_COMPONENTS = 0x0020;
     private const int WE_HAVE_A_SCALE = 0x0008;
     private const int WE_HAVE_AN_X_AND_Y_SCALE = 0x0040;
@@ -366,7 +373,7 @@ final class Woff2Decoder
             }
 
             $xMins[] = $bounds[0];
-            $glyf .= self::pad2($glyph);
+            $glyf .= self::pad4($glyph);
         }
 
         $offsets[] = \strlen($glyf);
@@ -462,31 +469,73 @@ final class Woff2Decoder
 
         $glyph .= self::uint16(\strlen($instructions)) . $instructions;
 
+        $flags = [];
+        $xData = $yData = '';
+        $previousX = $previousY = 0;
+
         foreach ($onCurve as $index => $isOnCurve) {
-            $flag = $isOnCurve ? 0x01 : 0x00;
+            $flag = $isOnCurve ? self::ON_CURVE_POINT : 0;
 
             if (0 === $index && $overlap) {
-                $flag |= 0x40;
+                $flag |= self::OVERLAP_SIMPLE;
             }
 
-            $glyph .= \chr($flag);
+            $xDelta = $xCoordinates[$index] - $previousX;
+            $yDelta = $yCoordinates[$index] - $previousY;
+            $previousX = $xCoordinates[$index];
+            $previousY = $yCoordinates[$index];
+
+            if (0 === $xDelta) {
+                $flag |= self::X_IS_SAME_OR_POSITIVE_X_SHORT_VECTOR;
+            } elseif (abs($xDelta) <= 0xFF) {
+                $flag |= self::X_SHORT_VECTOR;
+                $flag |= $xDelta > 0 ? self::X_IS_SAME_OR_POSITIVE_X_SHORT_VECTOR : 0;
+                $xData .= \chr(abs($xDelta));
+            } else {
+                $xData .= self::int16($xDelta);
+            }
+
+            if (0 === $yDelta) {
+                $flag |= self::Y_IS_SAME_OR_POSITIVE_Y_SHORT_VECTOR;
+            } elseif (abs($yDelta) <= 0xFF) {
+                $flag |= self::Y_SHORT_VECTOR;
+                $flag |= $yDelta > 0 ? self::Y_IS_SAME_OR_POSITIVE_Y_SHORT_VECTOR : 0;
+                $yData .= \chr(abs($yDelta));
+            } else {
+                $yData .= self::int16($yDelta);
+            }
+
+            $flags[] = $flag;
         }
 
-        $previous = 0;
+        return $glyph . self::encodeFlags($flags) . $xData . $yData;
+    }
 
-        foreach ($xCoordinates as $coordinate) {
-            $glyph .= self::int16($coordinate - $previous);
-            $previous = $coordinate;
+    /**
+     * @param list<int> $flags
+     */
+    private static function encodeFlags(array $flags): string
+    {
+        $data = '';
+
+        for ($index = 0, $count = \count($flags); $index < $count;) {
+            $flag = $flags[$index];
+            $runLength = 1;
+
+            while ($index + $runLength < $count && $flags[$index + $runLength] === $flag && $runLength < 256) {
+                ++$runLength;
+            }
+
+            if ($runLength > 1) {
+                $data .= self::uint8($flag | self::REPEAT_FLAG) . self::uint8($runLength - 1);
+            } else {
+                $data .= self::uint8($flag);
+            }
+
+            $index += $runLength;
         }
 
-        $previous = 0;
-
-        foreach ($yCoordinates as $coordinate) {
-            $glyph .= self::int16($coordinate - $previous);
-            $previous = $coordinate;
-        }
-
-        return $glyph;
+        return $data;
     }
 
     /**
@@ -925,14 +974,23 @@ final class Woff2Decoder
         return pack('n', $value);
     }
 
+    private static function uint8(int $value): string
+    {
+        if ($value < 0 || $value > 0xFF) {
+            throw new InvalidFontException('Font value is outside the unsigned 8-bit range.');
+        }
+
+        return \chr($value);
+    }
+
     private static function uint32(int $value): string
     {
         return pack('N', $value & 0xFFFFFFFF);
     }
 
-    private static function pad2(string $data): string
+    private static function pad4(string $data): string
     {
-        return $data . (0 === \strlen($data) % 2 ? '' : "\0");
+        return str_pad($data, self::round4(\strlen($data)), "\0");
     }
 
     private static function assertConsumed(int $cursor, BinaryReader $reader, string $stream): void

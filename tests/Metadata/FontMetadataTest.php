@@ -71,4 +71,11 @@ final class FontMetadataTest extends TestCase
 
         self::assertSame(FontFormat::TrueType, FontMetadata::fromFace($face)->format);
     }
+
+    public function testItKeepsInferringTheFormatForHistoricallyConstructedFaces(): void
+    {
+        $face = new FontFace('/tmp/font.ttf', 1000, 800, -200, 1, []);
+
+        self::assertSame(FontFormat::TrueType, FontMetadata::fromFace($face)->format);
+    }
 }
