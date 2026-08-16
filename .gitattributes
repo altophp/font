@@ -4,12 +4,10 @@
 /.github                     export-ignore
 /.gitignore                  export-ignore
 /.php-cs-fixer.dist.php      export-ignore
-/TODO_NEXT.md                export-ignore
 /docs                        export-ignore
 /phpstan.neon.dist           export-ignore
 /phpunit.xml.dist            export-ignore
 /tests                       export-ignore
-/tools                       export-ignore
 
 /docs/**                     linguist-documentation
 /tests/Fixtures/**           -linguist-detectable

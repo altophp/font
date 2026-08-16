@@ -3,7 +3,6 @@ parameters:
     paths:
         - src
         - tests
-        - tools
     excludePaths:
         - tests/Fixtures/*
     checkUninitializedProperties: true
