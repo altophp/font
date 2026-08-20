@@ -16,6 +16,8 @@ namespace Alto\Font;
 use Alto\Font\Metadata\FontFormat;
 
 /**
+ * Exposes structural information about one loaded font face.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class FontFace

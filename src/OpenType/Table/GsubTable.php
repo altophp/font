@@ -18,7 +18,12 @@ use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\Exception\UnsupportedFontException;
 
 /**
- * Conservative glyph-substitution graph used while glyph IDs stay stable.
+ * Builds a conservative glyph substitution graph.
+ *
+ * Glyph closure is computed without shaping text, retaining every supported
+ * output that a rooted or satisfied contextual lookup may produce.
+ *
+ * @author Simon André <smn.andre@gmail.com>
  *
  * @internal
  */

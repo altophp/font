@@ -1,6 +1,6 @@
 # Font metadata
 
-Alto Font exposes three related views of a loaded face. Choose the smallest
+ALTO Font exposes three related views of a loaded face. Choose the smallest
 one that answers the current question.
 
 ## Face metrics
@@ -28,11 +28,11 @@ reports the number of faces in the file.
 
 ## Matching descriptors
 
-`getDescriptor()` returns the naming and CSS-like characteristics used by
+`descriptor()` returns the naming and CSS-like characteristics used by
 font discovery:
 
 ```php
-$descriptor = $font->getDescriptor();
+$descriptor = $font->descriptor();
 
 echo $descriptor->family;
 echo $descriptor->subfamily;
@@ -61,10 +61,10 @@ echo $metadata->licenseUrl;
 
 Available optional fields include full and PostScript names, copyright,
 manufacturer, designer and vendor details, description, version, and license
-information. A missing name-table record is returned as `null`; Alto Font does
+information. A missing name-table record is returned as `null`; ALTO Font does
 not invent a replacement value.
 
-Name selection is not locale-aware. Alto Font currently keeps the first
+Name selection is not locale-aware. ALTO Font currently keeps the first
 decodable record for each field instead of selecting by language. Non-ASCII
 legacy Mac Roman names may not be transcoded correctly. Applications that need
 localized names should treat this metadata as a best available value.

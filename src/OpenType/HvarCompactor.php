@@ -18,6 +18,10 @@ use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\Exception\UnsupportedFontException;
 
 /**
+ * Compacts horizontal variation mappings.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @internal
  */
 final readonly class HvarCompactor

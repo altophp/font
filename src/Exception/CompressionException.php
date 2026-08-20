@@ -13,4 +13,9 @@ declare(strict_types=1);
 
 namespace Alto\Font\Exception;
 
+/**
+ * Reports a font compression failure.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final class CompressionException extends \RuntimeException implements FontExceptionInterface {}

@@ -17,6 +17,10 @@ use Alto\Font\Binary\BinaryReader;
 use Alto\Font\Exception\InvalidFontException;
 
 /**
+ * Recalculates OS/2 Unicode and code page coverage.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @internal
  */
 final readonly class Os2CoverageRecalculator

@@ -16,6 +16,10 @@ namespace Alto\Font\OpenType;
 use Alto\Font\Exception\InvalidFontException;
 
 /**
+ * Calculates OpenType table checksums.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @internal
  */
 final readonly class SfntChecksum

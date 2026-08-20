@@ -138,6 +138,92 @@ final class GsubTableTest extends TestCase
         self::assertSame([1, 2, 4], $glyphs);
     }
 
+    public function testVersionOnePointOneFeatureVariationsConservativelyRootEveryLookup(): void
+    {
+        $gsub = self::gsubWithLookups([
+            self::lookup(1, self::singleFormat2(1, 2)),
+            self::lookup(1, self::singleFormat2(3, 4)),
+        ], [0], featureVariations: true);
+        $closure = GsubTable::parse(new BinaryReader($gsub, 'GSUB 1.1'))
+            ->glyphClosure([3 => true], 5);
+
+        self::assertSame([3, 4], array_keys($closure));
+    }
+
+    public function testItParsesFormatOneClassDefinitionsInContextRules(): void
+    {
+        $gsub = self::gsubWithLookups([
+            self::lookup(5, self::contextFormat2WithFormatOneClasses(1, 2)),
+            self::lookup(1, self::singleFormat2(1, 4)),
+        ], [0]);
+        $closure = GsubTable::parse(new BinaryReader($gsub, 'GSUB format-one classes'))
+            ->glyphClosure([1 => true, 2 => true], 6);
+
+        self::assertSame([1, 2, 4], array_keys($closure));
+    }
+
+    public function testItAcceptsEmptyFormatTwoCoverage(): void
+    {
+        $table = GsubTable::parse(new BinaryReader(
+            self::gsub(1, self::singleWithCoverage(self::u16(2) . self::u16(0))),
+            'GSUB empty coverage',
+        ));
+
+        self::assertSame([1 => true], $table->glyphClosure([1 => true], 2));
+    }
+
+    public function testItSkipsNullContextRuleSets(): void
+    {
+        $context = self::u16(1)
+            . self::u16(8)
+            . self::u16(1)
+            . self::u16(0)
+            . self::coverage(1);
+        $table = GsubTable::parse(new BinaryReader(self::gsub(5, $context), 'GSUB NULL context set'));
+
+        self::assertSame([1 => true], $table->glyphClosure([1 => true], 2));
+    }
+
+    public function testItRejectsFeatureLookupIndexesOutsideTheLookupList(): void
+    {
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('feature 0 references lookup index 1 outside lookup count 1');
+
+        GsubTable::parse(new BinaryReader(self::gsubWithLookups([
+            self::lookup(1, self::singleFormat2(1, 2)),
+        ], [1]), 'GSUB'));
+    }
+
+    public function testItRejectsNestedExtensionSubstitutions(): void
+    {
+        $this->expectException(UnsupportedFontException::class);
+        $this->expectExceptionMessage('contains a nested extension substitution');
+
+        GsubTable::parse(new BinaryReader(
+            self::gsub(7, self::extension(7, self::u16(1))),
+            'GSUB',
+        ));
+    }
+
+    public function testItRejectsReversedCoverageRanges(): void
+    {
+        $coverage = self::u16(2)
+            . self::u16(1)
+            . self::u16(2)
+            . self::u16(1)
+            . self::u16(0);
+        $single = self::u16(2)
+            . self::u16(8)
+            . self::u16(1)
+            . self::u16(3)
+            . $coverage;
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('coverage range start must not exceed its end');
+
+        GsubTable::parse(new BinaryReader(self::gsub(1, $single), 'GSUB'));
+    }
+
     public function testItRejectsContextualLookupRecordsOutsideTheLookupList(): void
     {
         $this->expectException(InvalidFontException::class);
@@ -193,6 +279,164 @@ final class GsubTableTest extends TestCase
         $table->glyphClosure([1 => true], 5);
     }
 
+    /**
+     * @param class-string<\Throwable> $exception
+     */
+    #[DataProvider('malformedTables')]
+    public function testItRejectsMalformedTables(string $table, string $exception, string $message): void
+    {
+        $this->expectException($exception);
+        $this->expectExceptionMessage($message);
+
+        GsubTable::parse(new BinaryReader($table, 'malformed GSUB'));
+    }
+
+    /**
+     * @return iterable<string, array{string, class-string<\Throwable>, string}>
+     */
+    public static function malformedTables(): iterable
+    {
+        yield 'unsupported version' => [
+            self::u16(2) . self::u16(0) . str_repeat("\0", 6),
+            UnsupportedFontException::class,
+            'version 2.0 is not supported',
+        ];
+        yield 'NULL lists' => [
+            self::u16(1) . self::u16(0) . self::u16(10) . self::u16(0) . self::u16(0),
+            InvalidFontException::class,
+            'list offsets must not be NULL',
+        ];
+        yield 'NULL feature' => [
+            self::withPatchedUInt16(self::gsub(1, self::singleFormat2(1, 2)), 18, 0),
+            InvalidFontException::class,
+            'feature 0 offset must not be NULL',
+        ];
+        yield 'NULL lookup' => [
+            self::withPatchedUInt16(
+                self::gsub(1, self::singleFormat2(1, 2)),
+                self::lookupListOffset(self::gsub(1, self::singleFormat2(1, 2))) + 2,
+                0,
+            ),
+            InvalidFontException::class,
+            'lookup 0 offset must not be NULL',
+        ];
+        yield 'unsupported lookup type' => [
+            self::gsub(9, self::u16(1)),
+            UnsupportedFontException::class,
+            'unsupported type 9',
+        ];
+        yield 'unsupported multiple format' => [
+            self::gsub(2, self::u16(2)),
+            UnsupportedFontException::class,
+            'type 2 uses unsupported format 2',
+        ];
+        yield 'unsupported alternate format' => [
+            self::gsub(3, self::u16(2)),
+            UnsupportedFontException::class,
+            'type 3 uses unsupported format 2',
+        ];
+        yield 'unsupported ligature format' => [
+            self::gsub(4, self::u16(2)),
+            UnsupportedFontException::class,
+            'type 4 uses unsupported format 2',
+        ];
+        yield 'unsupported context format' => [
+            self::gsub(5, self::u16(4)),
+            UnsupportedFontException::class,
+            'type 5 uses unsupported format 4',
+        ];
+        yield 'unsupported reverse format' => [
+            self::gsub(8, self::u16(2)),
+            UnsupportedFontException::class,
+            'type 8 uses unsupported format 2',
+        ];
+        yield 'empty lookup' => [
+            self::gsubWithLookups([self::u16(1) . self::u16(0) . self::u16(0)]),
+            InvalidFontException::class,
+            'at least one subtable',
+        ];
+        yield 'NULL subtable' => [
+            self::gsubWithLookups([self::u16(1) . self::u16(0) . self::u16(1) . self::u16(0)]),
+            InvalidFontException::class,
+            'subtable 0 offset must not be NULL',
+        ];
+        yield 'NULL multiple sequence' => [
+            self::gsub(2, self::u16(1) . self::u16(8) . self::u16(1) . self::u16(0) . self::coverage(1)),
+            InvalidFontException::class,
+            'sequence offset must not be NULL',
+        ];
+        yield 'NULL alternate set' => [
+            self::gsub(3, self::u16(1) . self::u16(8) . self::u16(1) . self::u16(0) . self::coverage(1)),
+            InvalidFontException::class,
+            'alternate-set offset must not be NULL',
+        ];
+        yield 'NULL ligature set' => [
+            self::gsub(4, self::u16(1) . self::u16(8) . self::u16(1) . self::u16(0) . self::coverage(1)),
+            InvalidFontException::class,
+            'ligature-set offset must not be NULL',
+        ];
+        yield 'NULL ligature' => [
+            self::gsub(4, self::ligatureWithSet(1, self::u16(1) . self::u16(0))),
+            InvalidFontException::class,
+            'ligature offset must not be NULL',
+        ];
+        yield 'single-component ligature' => [
+            self::gsub(4, self::ligatureWithSet(1, self::u16(1) . self::u16(4) . self::u16(2) . self::u16(1))),
+            InvalidFontException::class,
+            'at least two components',
+        ];
+        yield 'unsupported extension format' => [
+            self::gsub(7, self::u16(2) . self::u16(1) . self::u32(8)),
+            UnsupportedFontException::class,
+            'type 7 uses unsupported format 2',
+        ];
+        yield 'NULL extension' => [
+            self::gsub(7, self::u16(1) . self::u16(1) . self::u32(0)),
+            InvalidFontException::class,
+            'extension offset must not be NULL',
+        ];
+        yield 'NULL coverage' => [
+            self::gsub(1, self::u16(2) . self::u16(0) . self::u16(0)),
+            InvalidFontException::class,
+            'coverage offset must not be NULL',
+        ];
+        yield 'mismatched single substitution count' => [
+            self::gsub(1, self::u16(2) . self::u16(8) . self::u16(0) . self::u16(0) . self::coverage(1)),
+            InvalidFontException::class,
+            'single substitution count 0 does not match coverage count 1',
+        ];
+        yield 'unsupported coverage' => [
+            self::gsub(1, self::u16(2) . self::u16(8) . self::u16(0) . self::u16(0) . self::u16(3)),
+            UnsupportedFontException::class,
+            'coverage uses unsupported format 3',
+        ];
+        yield 'duplicate coverage indexes' => [
+            self::gsub(1, self::singleWithCoverage(self::rangeCoverage(0, 0))),
+            InvalidFontException::class,
+            'duplicate coverage indexes',
+        ];
+        yield 'non-contiguous coverage indexes' => [
+            self::gsub(1, self::singleWithCoverage(self::rangeCoverage(1))),
+            InvalidFontException::class,
+            'coverage indexes are not contiguous',
+        ];
+        yield 'NULL context rule' => [
+            self::gsub(5, self::contextFormatOneWithSet(1, self::u16(1) . self::u16(0))),
+            InvalidFontException::class,
+            'context-rule offset must not be NULL',
+        ];
+        yield 'NULL class definition' => [
+            self::gsub(5, self::u16(2) . self::u16(12) . str_repeat("\0", 8) . self::coverage(1)),
+            InvalidFontException::class,
+            'class-definition offset must not be NULL',
+        ];
+        yield 'unsupported class definition' => [
+            self::gsub(5, self::u16(2) . self::u16(14) . self::u16(12) . str_repeat("\0", 6) . self::u16(3) . self::coverage(1)),
+            UnsupportedFontException::class,
+            'class definition uses unsupported format 3',
+        ];
+    }
+
     private static function gsub(int $lookupType, string $subtable): string
     {
         return self::gsubWithLookups([self::lookup($lookupType, $subtable)]);
@@ -202,8 +446,11 @@ final class GsubTableTest extends TestCase
      * @param list<string>   $lookups
      * @param list<int>|null $featureLookupIndexes
      */
-    private static function gsubWithLookups(array $lookups, ?array $featureLookupIndexes = null): string
-    {
+    private static function gsubWithLookups(
+        array $lookups,
+        ?array $featureLookupIndexes = null,
+        bool $featureVariations = false,
+    ): string {
         $featureLookupIndexes ??= array_keys($lookups);
         $feature = self::u16(0)
             . self::u16(\count($featureLookupIndexes))
@@ -222,21 +469,68 @@ final class GsubTableTest extends TestCase
             $offset += \strlen($lookup);
         }
 
-        return self::u16(1)
-            . self::u16(0)
-            . self::u16(10)
-            . self::u16(12)
-            . self::u16(12 + \strlen($featureList))
-            . self::u16(0)
+        $headerLength = $featureVariations ? 14 : 10;
+        $scriptList = self::u16(0);
+        $lookupList = self::u16(\count($lookups)) . $lookupOffsets . $lookupData;
+        $featureListOffset = $headerLength + \strlen($scriptList);
+        $lookupListOffset = $featureListOffset + \strlen($featureList);
+        $featureVariationsOffset = $lookupListOffset + \strlen($lookupList);
+        $header = self::u16(1)
+            . self::u16($featureVariations ? 1 : 0)
+            . self::u16($headerLength)
+            . self::u16($featureListOffset)
+            . self::u16($lookupListOffset);
+
+        if ($featureVariations) {
+            $header .= self::u32($featureVariationsOffset);
+        }
+
+        return $header
+            . $scriptList
             . $featureList
-            . self::u16(\count($lookups))
-            . $lookupOffsets
-            . $lookupData;
+            . $lookupList
+            . ($featureVariations ? self::u16(1) . self::u16(0) . self::u32(0) : '');
     }
 
     private static function lookup(int $lookupType, string $subtable): string
     {
         return self::u16($lookupType) . self::u16(0) . self::u16(1) . self::u16(8) . $subtable;
+    }
+
+    private static function lookupListOffset(string $gsub): int
+    {
+        return new BinaryReader($gsub, 'GSUB')->uint16(8);
+    }
+
+    private static function withPatchedUInt16(string $data, int $offset, int $value): string
+    {
+        return substr_replace($data, self::u16($value), $offset, 2);
+    }
+
+    private static function ligatureWithSet(int $glyphId, string $set): string
+    {
+        return self::u16(1)
+            . self::u16(8 + \strlen($set))
+            . self::u16(1)
+            . self::u16(8)
+            . $set
+            . self::coverage($glyphId);
+    }
+
+    private static function singleWithCoverage(string $coverage): string
+    {
+        return self::u16(2) . self::u16(8) . self::u16(0) . self::u16(0) . $coverage;
+    }
+
+    private static function rangeCoverage(int ...$indexes): string
+    {
+        $data = self::u16(2) . self::u16(\count($indexes));
+
+        foreach (array_values($indexes) as $glyph => $index) {
+            $data .= self::u16($glyph + 1) . self::u16($glyph + 1) . self::u16($index);
+        }
+
+        return $data;
     }
 
     private static function singleFormat1(int $inputGlyphId, int $delta): string
@@ -354,6 +648,41 @@ final class GsubTableTest extends TestCase
             . $set
             . $classDefinition
             . self::coverage($firstGlyphId);
+    }
+
+    private static function contextFormat2WithFormatOneClasses(int $firstGlyphId, int $secondGlyphId): string
+    {
+        $rule = self::u16(2)
+            . self::u16(1)
+            . self::u16(2)
+            . self::lookupRecord(0, 1);
+        $set = self::u16(1) . self::u16(4) . $rule;
+        $classDefinition = self::u16(1)
+            . self::u16($firstGlyphId)
+            . self::u16(2)
+            . self::u16(1)
+            . self::u16(2);
+        $headerLength = 12;
+
+        return self::u16(2)
+            . self::u16($headerLength + \strlen($set) + \strlen($classDefinition))
+            . self::u16($headerLength + \strlen($set))
+            . self::u16(2)
+            . self::u16(0)
+            . self::u16($headerLength)
+            . $set
+            . $classDefinition
+            . self::coverage($firstGlyphId);
+    }
+
+    private static function contextFormatOneWithSet(int $glyphId, string $set): string
+    {
+        return self::u16(1)
+            . self::u16(8 + \strlen($set))
+            . self::u16(1)
+            . self::u16(8)
+            . $set
+            . self::coverage($glyphId);
     }
 
     private static function contextFormat3(

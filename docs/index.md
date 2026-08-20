@@ -1,6 +1,6 @@
-# Alto Font
+# ALTO Font
 
-Alto Font loads font files, exposes their data, converts supported formats,
+ALTO Font loads font files, exposes their data, converts supported formats,
 compresses webfont output, and creates Unicode subsets. It does not shape text,
 apply kerning, or draw glyphs.
 
@@ -10,7 +10,7 @@ use Alto\Font\Font;
 $font = Font::fromFile(__DIR__.'/fonts/Inter-Regular.woff2');
 
 $family = $font->metadata()->family;
-$advanceWidth = $font->getMetrics('A')->advanceWidth;
+$advanceWidth = $font->metrics('A')->advanceWidth;
 ```
 
 ## Introduction
@@ -45,5 +45,5 @@ $advanceWidth = $font->getMetrics('A')->advanceWidth;
 - [Unicode sets](subsetting/unicode-sets.md): select text, codepoints, ranges, and CSS unicode ranges.
 - [Policies](subsetting/policies.md): control glyph IDs, hinting, layout, and variable data.
 
-Alto Font reports and transforms font data. Text layout, fallback,
+ALTO Font reports and transforms font data. Text layout, fallback,
 bidirectional text, shaping, and rendering belong to higher-level packages.

@@ -23,7 +23,7 @@ $font = Font::fromFile(__DIR__.'/fonts/Inter.ttf');
 
 echo $font->metadata()->family;
 echo $font->face()->unitsPerEm;
-echo $font->getMetrics('A')->advanceWidth;
+echo $font->metrics('A')->advanceWidth;
 ```
 
 Unsupported containers and font features fail with typed exceptions instead
@@ -49,7 +49,7 @@ Load a font and inspect its face, descriptor, and one glyph:
 use Alto\Font\Font;
 
 $font = Font::fromFile(__DIR__.'/fonts/Inter-Regular.ttf');
-$descriptor = $font->getDescriptor();
+$descriptor = $font->descriptor();
 
 printf(
     "%s %s, %d units per em\n",
@@ -58,7 +58,7 @@ printf(
     $font->face()->unitsPerEm,
 );
 
-$metrics = $font->getMetrics('A');
+$metrics = $font->metrics('A');
 $outline = $font->glyphOutline($metrics->glyphId);
 ```
 
@@ -177,7 +177,7 @@ use Alto\Font\Subset\SubsetOptions;
 use Alto\Font\Subset\UnicodeSet;
 
 $subset = $font->subset(new SubsetOptions(
-    UnicodeSet::fromText('Alto Font 0123456789'),
+    UnicodeSet::fromText('ALTO Font 0123456789'),
 ));
 
 echo $subset->retainedGlyphCount;

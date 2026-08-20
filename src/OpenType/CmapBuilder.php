@@ -14,6 +14,10 @@ declare(strict_types=1);
 namespace Alto\Font\OpenType;
 
 /**
+ * Builds OpenType character mapping tables.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @internal
  */
 final readonly class CmapBuilder

@@ -6,10 +6,10 @@ collection of faces in a particular container.
 
 ## Core concepts
 
-| Concept | Meaning | Alto Font API |
+| Concept | Meaning | ALTO Font API |
 | --- | --- | --- |
 | Family | Related faces sharing a family name | `metadata()->family` |
-| Face | One weight, style, stretch, and set of glyph data | `face()` and `getDescriptor()` |
+| Face | One weight, style, stretch, and set of glyph data | `face()` and `descriptor()` |
 | File | The path loaded directly or selected by discovery | `Font::fromFile()` and `FontFinder` |
 | Container | SFNT, WOFF, WOFF2, TTC, or OTC representation | `metadata()->format` |
 | Outline | Geometry technology used to describe glyph shapes | TrueType `glyf` is supported |

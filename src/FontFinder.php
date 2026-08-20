@@ -23,6 +23,8 @@ use Alto\Font\Locator\FontLocatorInterface;
 use Alto\Font\Metadata\FontMetadata;
 
 /**
+ * Finds the closest matching font from configured locations.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final class FontFinder
@@ -42,6 +44,11 @@ final class FontFinder
      */
     private array $queryPathCache = [];
 
+    /**
+     * @var array<string, FontExceptionInterface>
+     */
+    private array $diagnostics = [];
+
     public function __construct(
         private readonly FontLocatorInterface $locator,
         private readonly FontLoaderInterface $loader = new FontLoader(),
@@ -60,6 +67,16 @@ final class FontFinder
     public static function fromLocator(FontLocatorInterface $locator): self
     {
         return new self($locator);
+    }
+
+    /**
+     * Returns font files skipped because they could not be loaded.
+     *
+     * @return array<string, FontExceptionInterface>
+     */
+    public function diagnostics(): array
+    {
+        return $this->diagnostics;
     }
 
     public function has(
@@ -157,8 +174,13 @@ final class FontFinder
     private function loadCandidate(string $path): ?Font
     {
         try {
-            return $this->loadFont($path);
-        } catch (FontExceptionInterface) {
+            $font = $this->loadFont($path);
+            unset($this->diagnostics[$path]);
+
+            return $font;
+        } catch (FontExceptionInterface $exception) {
+            $this->diagnostics[$path] = $exception;
+
             return null;
         }
     }

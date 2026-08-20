@@ -21,6 +21,8 @@ use Alto\Font\Variation\ItemStore\ItemVariationStore;
 use Alto\Font\Variation\NormalizedCoordinates;
 
 /**
+ * Evaluates horizontal metric variation deltas.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class HvarTable

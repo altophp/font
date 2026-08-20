@@ -19,6 +19,10 @@ use Alto\Font\Exception\UnsupportedFontException;
 use Alto\Font\OpenType\Layout\ClassDefinitionTable;
 
 /**
+ * Remaps supported GSUB structures to compact glyph identifiers.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @internal
  */
 final readonly class GsubCompactor

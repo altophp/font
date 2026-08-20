@@ -17,6 +17,8 @@ use Alto\Font\Descriptor\FontDescriptor;
 use Alto\Font\FontFace;
 
 /**
+ * Exposes names, descriptors, and licensing metadata for a font.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class FontMetadata

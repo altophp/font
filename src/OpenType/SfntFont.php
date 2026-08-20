@@ -37,9 +37,13 @@ use Alto\Font\Variation\Table\HvarTable;
 use Alto\Font\Variation\VariationCoordinates;
 
 /**
+ * Parses and exposes one internal SFNT font face.
+ *
  * @author Simon André <smn.andre@gmail.com>
+ *
+ * @internal
  */
-final class SfntFont
+final readonly class SfntFont
 {
     private const int ARG_1_AND_2_ARE_WORDS = 0x0001;
     private const int ARGS_ARE_XY_VALUES = 0x0002;

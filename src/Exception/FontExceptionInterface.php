@@ -14,6 +14,8 @@ declare(strict_types=1);
 namespace Alto\Font\Exception;
 
 /**
+ * Marks exceptions raised by the font package.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 interface FontExceptionInterface extends \Throwable {}

@@ -15,6 +15,11 @@ namespace Alto\Font\Subset;
 
 use Alto\Font\Exception\InvalidUnicodeRangeException;
 
+/**
+ * Represents one inclusive Unicode codepoint range.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class UnicodeRange
 {
     public const int MIN_CODEPOINT = 0x000000;

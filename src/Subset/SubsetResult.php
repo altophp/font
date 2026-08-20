@@ -15,6 +15,11 @@ namespace Alto\Font\Subset;
 
 use Alto\Font\Font;
 
+/**
+ * Reports the font and statistics produced by subsetting.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class SubsetResult
 {
     /**

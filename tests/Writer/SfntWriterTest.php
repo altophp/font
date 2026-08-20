@@ -26,25 +26,46 @@ use PHPUnit\Framework\TestCase;
 #[CoversClass(FontWriteException::class)]
 final class SfntWriterTest extends TestCase
 {
+    private string $temporaryDirectory = '';
+
+    protected function setUp(): void
+    {
+        $this->temporaryDirectory = sys_get_temp_dir() . '/alto-font-sfnt-writer-' . bin2hex(random_bytes(8));
+        self::assertTrue(mkdir($this->temporaryDirectory, 0700));
+    }
+
+    protected function tearDown(): void
+    {
+        if (!is_dir($this->temporaryDirectory)) {
+            return;
+        }
+
+        foreach (glob($this->temporaryDirectory . '/*') ?: [] as $file) {
+            unlink($file);
+        }
+
+        rmdir($this->temporaryDirectory);
+    }
+
     public function testItDumpsAndWritesAFontThatCanBeReloaded(): void
     {
-        $source = self::temporaryPath('source.ttf');
-        $destination = self::temporaryPath('destination.ttf');
+        $source = $this->temporaryPath('source.ttf');
+        $destination = $this->temporaryPath('destination.ttf');
         TinyTrueTypeFont::write($source);
         $font = Font::fromFile($source);
         $writer = new SfntWriter();
 
-        self::assertSame('Atelier Tiny', Font::fromFile(self::writeDump($writer->dump($font)))->getDescriptor()->family);
+        self::assertSame('Atelier Tiny', Font::fromFile($this->writeDump($writer->dump($font)))->descriptor()->family);
 
         $writer->write($font, $destination);
 
-        self::assertSame('Atelier Tiny', Font::fromFile($destination)->getDescriptor()->family);
+        self::assertSame('Atelier Tiny', Font::fromFile($destination)->descriptor()->family);
     }
 
     public function testItAcceptsAStringableDestination(): void
     {
-        $source = self::temporaryPath('source.ttf');
-        $destination = self::temporaryPath('destination.ttf');
+        $source = $this->temporaryPath('source.ttf');
+        $destination = $this->temporaryPath('destination.ttf');
         TinyTrueTypeFont::write($source);
         $file = new class ($destination) implements \Stringable {
             public function __construct(private readonly string $path) {}
@@ -62,8 +83,8 @@ final class SfntWriterTest extends TestCase
 
     public function testItRefusesToReplaceAnExistingDestination(): void
     {
-        $source = self::temporaryPath('source.ttf');
-        $destination = self::temporaryPath('destination.ttf');
+        $source = $this->temporaryPath('source.ttf');
+        $destination = $this->temporaryPath('destination.ttf');
         TinyTrueTypeFont::write($source);
         file_put_contents($destination, 'keep me');
 
@@ -79,7 +100,7 @@ final class SfntWriterTest extends TestCase
 
     public function testItRejectsAnEmptyDestination(): void
     {
-        $source = self::temporaryPath('source.ttf');
+        $source = $this->temporaryPath('source.ttf');
         TinyTrueTypeFont::write($source);
 
         $this->expectException(FontWriteException::class);
@@ -88,14 +109,14 @@ final class SfntWriterTest extends TestCase
         new SfntWriter()->write(Font::fromFile($source), '');
     }
 
-    private static function temporaryPath(string $suffix): string
+    private function temporaryPath(string $suffix): string
     {
-        return sys_get_temp_dir() . '/alto-font-writer-' . bin2hex(random_bytes(4)) . '-' . $suffix;
+        return $this->temporaryDirectory . '/' . $suffix;
     }
 
-    private static function writeDump(string $data): string
+    private function writeDump(string $data): string
     {
-        $path = self::temporaryPath('dump.ttf');
+        $path = $this->temporaryPath('dump.ttf');
         file_put_contents($path, $data);
 
         return $path;

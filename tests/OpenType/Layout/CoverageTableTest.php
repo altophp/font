@@ -15,6 +15,7 @@ namespace Alto\Font\Tests\OpenType\Layout;
 
 use Alto\Font\Binary\BinaryReader;
 use Alto\Font\Exception\InvalidFontException;
+use Alto\Font\Exception\UnsupportedFontException;
 use Alto\Font\OpenType\Layout\CoverageTable;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
@@ -49,6 +50,68 @@ final class CoverageTableTest extends TestCase
         $this->expectExceptionMessage('strictly increasing');
 
         CoverageTable::parse(new BinaryReader("\0\0" . $coverage, 'invalid coverage'), 0, 2);
+    }
+
+    public function testItRejectsNullOffsets(): void
+    {
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('offset must not be NULL');
+
+        CoverageTable::parse(new BinaryReader('', 'null coverage'), 0, 0);
+    }
+
+    public function testItRejectsUnsupportedFormats(): void
+    {
+        $this->expectException(UnsupportedFontException::class);
+        $this->expectExceptionMessage('format 3 is not supported');
+
+        CoverageTable::parse(new BinaryReader("\0\0" . self::u16(3), 'unsupported coverage'), 0, 2);
+    }
+
+    public function testItRejectsOverlappingFormatTwoRanges(): void
+    {
+        $coverage = self::u16(2)
+            . self::u16(2)
+            . self::u16(2) . self::u16(4) . self::u16(0)
+            . self::u16(4) . self::u16(5) . self::u16(3);
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('ranges are invalid or overlap');
+
+        CoverageTable::parse(new BinaryReader("\0\0" . $coverage, 'overlapping coverage'), 0, 2);
+    }
+
+    public function testItRejectsOverlappingCoverageIndexes(): void
+    {
+        $coverage = self::u16(2)
+            . self::u16(2)
+            . self::u16(2) . self::u16(3) . self::u16(0)
+            . self::u16(5) . self::u16(5) . self::u16(1);
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('indexes overlap');
+
+        CoverageTable::parse(new BinaryReader("\0\0" . $coverage, 'overlapping indexes'), 0, 2);
+    }
+
+    public function testItRejectsNonContiguousCoverageIndexes(): void
+    {
+        $coverage = self::u16(2)
+            . self::u16(1)
+            . self::u16(2) . self::u16(3) . self::u16(1);
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('indexes are not contiguous');
+
+        CoverageTable::parse(new BinaryReader("\0\0" . $coverage, 'non-contiguous indexes'), 0, 2);
+    }
+
+    public function testItRejectsOutOfRangeGlyphsWhenBuilding(): void
+    {
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('glyph ID 65536 is invalid');
+
+        CoverageTable::build([0x10000]);
     }
 
     private static function u16(int $value): string

@@ -17,6 +17,8 @@ use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\OpenType\Table\TableRecord;
 
 /**
+ * Reads typed values from bounded binary font data.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class BinaryReader

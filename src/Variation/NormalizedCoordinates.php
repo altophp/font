@@ -14,6 +14,8 @@ declare(strict_types=1);
 namespace Alto\Font\Variation;
 
 /**
+ * Stores normalized coordinates for variation axes.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class NormalizedCoordinates

@@ -24,6 +24,11 @@ use Alto\Font\OpenType\SfntDocument;
 use Alto\Font\OpenType\Woff2KnownTags;
 use Alto\Font\OpenType\Woff2TransformEncoder;
 
+/**
+ * Writes fonts as WOFF2 data with an injected compressor.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class Woff2Writer
 {
     private const int CHUNK_SIZE = 1048576;

@@ -18,12 +18,13 @@ use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\Exception\UnsupportedFontException;
 
 /**
+ * Decodes WOFF2 data into standalone SFNT data.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @internal
  */
-/**
- * @author Simon André <smn.andre@gmail.com>
- */
-final class Woff2Decoder
+final readonly class Woff2Decoder
 {
     private const int ARG_1_AND_2_ARE_WORDS = 0x0001;
     private const int ON_CURVE_POINT = 0x01;

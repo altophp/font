@@ -25,9 +25,9 @@ printf(
 | --- | --- |
 | What container and face was loaded? | `face()` and `metadata()->format` |
 | What names, version, vendor, or license fields exist? | `metadata()` |
-| What weight, style, and stretch describe the face? | `getDescriptor()` |
+| What weight, style, and stretch describe the face? | `descriptor()` |
 | Does the face contain one Unicode codepoint? | `glyphIdForCodepoint()` |
-| What are one glyph's advance and side bearing? | `glyphMetrics()` or `getMetrics()` |
+| What are one glyph's advance and side bearing? | `glyphMetrics()` or `metrics()` |
 | What is the glyph's neutral contour geometry? | `glyphOutline()` |
 | Which variation axes and instances exist? | `variations()` |
 

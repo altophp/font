@@ -79,7 +79,7 @@ equivalent, not necessarily byte-for-byte identical.
 | Exception | Meaning |
 | --- | --- |
 | `FontWriteException` | The destination is empty, exists already, or cannot be written |
-| `CompressionException` | Brotli support, compression, or temporary streams failed |
+| `CompressionException` | Zlib or Brotli compression, support, or temporary streams failed |
 | `UnsupportedFontException` | The requested view or font feature cannot be written |
 | `InvalidFontException` | Required source tables are malformed or inconsistent |
 

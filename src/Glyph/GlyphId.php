@@ -16,6 +16,8 @@ namespace Alto\Font\Glyph;
 use Alto\Font\Exception\InvalidFontException;
 
 /**
+ * Identifies one glyph within a font face.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class GlyphId

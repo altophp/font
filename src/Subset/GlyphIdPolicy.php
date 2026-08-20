@@ -13,6 +13,11 @@ declare(strict_types=1);
 
 namespace Alto\Font\Subset;
 
+/**
+ * Selects how glyph identifiers are preserved or compacted.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ */
 enum GlyphIdPolicy
 {
     case Preserve;

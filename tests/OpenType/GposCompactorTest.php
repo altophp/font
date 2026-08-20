@@ -14,6 +14,7 @@ declare(strict_types=1);
 namespace Alto\Font\Tests\OpenType;
 
 use Alto\Font\Binary\BinaryReader;
+use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\OpenType\GlyphIdMap;
 use Alto\Font\OpenType\GposCompactor;
 use Alto\Font\OpenType\Layout\ClassDefinitionTable;
@@ -24,6 +25,50 @@ use PHPUnit\Framework\TestCase;
 #[CoversClass(GposCompactor::class)]
 final class GposCompactorTest extends TestCase
 {
+    public function testItCompactsSinglePositioningFormatOneWithADeviceTable(): void
+    {
+        $coverage = CoverageTable::build([2]);
+        $device = self::u16(10) . self::u16(11) . self::u16(1) . self::u16(0x4000);
+        $single = self::u16(1)
+            . self::u16(10)
+            . self::u16(0x0044)
+            . self::i16(-20)
+            . self::u16(10 + \strlen($coverage))
+            . $coverage
+            . $device;
+        $mapping = GlyphIdMap::fromRetained(3, [2 => true]);
+        [$reader, $offset] = self::firstSubtable(GposCompactor::compact(self::gpos(1, $single), $mapping));
+
+        self::assertSame(1, $reader->uint16($offset));
+        self::assertSame(-20, $reader->int16($offset + 6));
+        self::assertSame([1], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 2)));
+
+        $newDevice = $offset + $reader->uint16($offset + 8);
+        self::assertSame(10, $reader->uint16($newDevice));
+        self::assertSame(11, $reader->uint16($newDevice + 2));
+        self::assertSame(1, $reader->uint16($newDevice + 4));
+        self::assertSame(0x4000, $reader->uint16($newDevice + 6));
+    }
+
+    public function testItFiltersSinglePositioningFormatTwoValuesWithTheirCoverage(): void
+    {
+        $coverage = CoverageTable::build([2, 4]);
+        $single = self::u16(2)
+            . self::u16(12)
+            . self::u16(0x0004)
+            . self::u16(2)
+            . self::i16(-20)
+            . self::i16(-40)
+            . $coverage;
+        $mapping = GlyphIdMap::fromRetained(5, [4 => true]);
+        [$reader, $offset] = self::firstSubtable(GposCompactor::compact(self::gpos(1, $single), $mapping));
+
+        self::assertSame(2, $reader->uint16($offset));
+        self::assertSame(1, $reader->uint16($offset + 6));
+        self::assertSame(-40, $reader->int16($offset + 8));
+        self::assertSame([1], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 2)));
+    }
+
     public function testItCompactsPairPositioningFormatOneThroughAnExtensionLookup(): void
     {
         $pairSetOne = self::u16(2)
@@ -185,6 +230,39 @@ final class GposCompactorTest extends TestCase
         self::assertSame(2, $reader->uint16($newRule + 2));
         self::assertSame(3, $reader->uint16($newRule + 6));
         self::assertSame(4, $reader->uint16($newRule + 10));
+    }
+
+    public function testItRejectsSinglePositioningCountsThatDoNotMatchCoverage(): void
+    {
+        $single = self::u16(2)
+            . self::u16(8)
+            . self::u16(0)
+            . self::u16(0)
+            . CoverageTable::build([2]);
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('single-adjustment count does not match coverage');
+
+        GposCompactor::compact(
+            self::gpos(1, $single),
+            GlyphIdMap::fromRetained(3, [2 => true]),
+        );
+    }
+
+    public function testItRejectsReservedValueFormatBits(): void
+    {
+        $single = self::u16(1)
+            . self::u16(6)
+            . self::u16(0x0100)
+            . CoverageTable::build([2]);
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('value format contains reserved bits');
+
+        GposCompactor::compact(
+            self::gpos(1, $single),
+            GlyphIdMap::fromRetained(3, [2 => true]),
+        );
     }
 
     /**

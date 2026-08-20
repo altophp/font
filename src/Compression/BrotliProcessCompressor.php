@@ -15,6 +15,11 @@ namespace Alto\Font\Compression;
 
 use Alto\Font\Exception\CompressionException;
 
+/**
+ * Compresses WOFF2 table data with the Brotli executable.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class BrotliProcessCompressor implements BrotliStreamCompressorInterface
 {
     public function __construct(

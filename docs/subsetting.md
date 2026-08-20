@@ -12,7 +12,7 @@ use Alto\Font\Subset\SubsetOptions;
 use Alto\Font\Subset\UnicodeSet;
 
 $font = Font::fromFile(__DIR__.'/fonts/Inter-Regular.ttf');
-$characters = UnicodeSet::fromText('Alto Font 0123456789');
+$characters = UnicodeSet::fromText('ALTO Font 0123456789');
 $result = $font->subset(new SubsetOptions($characters));
 ```
 

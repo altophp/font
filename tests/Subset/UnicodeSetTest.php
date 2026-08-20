@@ -13,7 +13,7 @@ declare(strict_types=1);
 
 namespace Alto\Font\Tests\Subset;
 
-use Alto\Font\Exception\InvalidFontException;
+use Alto\Font\Exception\InvalidTextException;
 use Alto\Font\Exception\InvalidUnicodeRangeException;
 use Alto\Font\Subset\UnicodeRange;
 use Alto\Font\Subset\UnicodeSet;
@@ -129,7 +129,7 @@ final class UnicodeSetTest extends TestCase
 
     public function testItRejectsInvalidUtf8Text(): void
     {
-        $this->expectException(InvalidFontException::class);
+        $this->expectException(InvalidTextException::class);
         $this->expectExceptionMessage('Text must be valid UTF-8.');
 
         UnicodeSet::fromText("\xFF");

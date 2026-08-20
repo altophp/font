@@ -17,6 +17,10 @@ use Alto\Font\Binary\BinaryReader;
 use Alto\Font\Exception\InvalidFontException;
 
 /**
+ * Recalculates TrueType maxp profile values.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @internal
  */
 final readonly class TrueTypeMaxpRecalculator

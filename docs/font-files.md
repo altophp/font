@@ -11,7 +11,7 @@ use Alto\Font\Font;
 $font = Font::fromFile(__DIR__.'/fonts/Inter-Regular.ttf');
 ```
 
-Alto Font detects the container from its signature instead of trusting the
+ALTO Font detects the container from its signature instead of trusting the
 file extension. A TTC or OTC file can contain several faces; pass a zero-based
 `faceIndex` to select one.
 

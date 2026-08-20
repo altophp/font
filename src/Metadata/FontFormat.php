@@ -14,6 +14,8 @@ declare(strict_types=1);
 namespace Alto\Font\Metadata;
 
 /**
+ * Identifies a loaded font container format.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 enum FontFormat: string

@@ -14,6 +14,8 @@ declare(strict_types=1);
 namespace Alto\Font\Glyph;
 
 /**
+ * Represents immutable contour geometry for one glyph.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class GlyphOutline

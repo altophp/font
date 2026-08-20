@@ -18,7 +18,12 @@ use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\OpenType\Table\TableRecord;
 
 /**
- * Immutable SFNT table set shared by parsed views and transformations.
+ * Represents an immutable SFNT table set shared by parsed and transformed views.
+ *
+ * Unchanged tables keep their original records while replacements and removals
+ * are layered without mutating the parsed source.
+ *
+ * @author Simon André <smn.andre@gmail.com>
  *
  * @internal
  */

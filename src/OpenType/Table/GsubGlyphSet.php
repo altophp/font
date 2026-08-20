@@ -16,7 +16,12 @@ namespace Alto\Font\OpenType\Table;
 use Alto\Font\Exception\InvalidFontException;
 
 /**
- * A glyph set that can represent class zero without eagerly knowing numGlyphs.
+ * Represents a glyph set used by contextual substitutions.
+ *
+ * Class zero is represented lazily through exclusions because its complete set
+ * depends on the font's glyph count.
+ *
+ * @author Simon André <smn.andre@gmail.com>
  *
  * @internal
  */

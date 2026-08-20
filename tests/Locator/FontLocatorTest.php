@@ -20,9 +20,43 @@ use PHPUnit\Framework\TestCase;
 #[CoversClass(FontLocator::class)]
 final class FontLocatorTest extends TestCase
 {
+    private string $temporaryRoot = '';
+
+    protected function setUp(): void
+    {
+        $this->temporaryRoot = sys_get_temp_dir() . '/alto-font-locator-' . bin2hex(random_bytes(8));
+        self::assertTrue(mkdir($this->temporaryRoot, 0700));
+    }
+
+    protected function tearDown(): void
+    {
+        if (!is_dir($this->temporaryRoot)) {
+            return;
+        }
+
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($this->temporaryRoot, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST,
+        );
+
+        foreach ($iterator as $entry) {
+            if (!$entry instanceof \SplFileInfo) {
+                continue;
+            }
+
+            if ($entry->isDir() && !$entry->isLink()) {
+                rmdir($entry->getPathname());
+            } else {
+                unlink($entry->getPathname());
+            }
+        }
+
+        rmdir($this->temporaryRoot);
+    }
+
     public function testItFindsFilesRecursivelyAcrossNestedDirectories(): void
     {
-        $root = self::temporaryDirectory('recursive');
+        $root = $this->temporaryDirectory('recursive');
         mkdir($root . '/nested/deeper', 0777, true);
         file_put_contents($root . '/top.ttf', '');
         file_put_contents($root . '/nested/mid.otf', '');
@@ -40,7 +74,7 @@ final class FontLocatorTest extends TestCase
 
     public function testItFiltersByExtensionCaseInsensitively(): void
     {
-        $root = self::temporaryDirectory('extensions');
+        $root = $this->temporaryDirectory('extensions');
         file_put_contents($root . '/font.TTF', '');
         file_put_contents($root . '/notes.txt', '');
         file_put_contents($root . '/archive.zip', '');
@@ -50,8 +84,8 @@ final class FontLocatorTest extends TestCase
 
     public function testItScansMultipleDirectories(): void
     {
-        $first = self::temporaryDirectory('multi-a');
-        $second = self::temporaryDirectory('multi-b');
+        $first = $this->temporaryDirectory('multi-a');
+        $second = $this->temporaryDirectory('multi-b');
         file_put_contents($first . '/a.ttf', '');
         file_put_contents($second . '/b.otf', '');
 
@@ -68,7 +102,7 @@ final class FontLocatorTest extends TestCase
 
     public function testItIgnoresPathsThatAreFiles(): void
     {
-        $root = self::temporaryDirectory('file-path');
+        $root = $this->temporaryDirectory('file-path');
         $path = $root . '/font.ttf';
         file_put_contents($path, '');
 
@@ -86,7 +120,7 @@ final class FontLocatorTest extends TestCase
             self::markTestSkipped('Running as root bypasses directory permissions.');
         }
 
-        $root = self::temporaryDirectory('unreadable');
+        $root = $this->temporaryDirectory('unreadable');
         mkdir($root . '/locked', 0000);
         file_put_contents($root . '/readable.ttf', '');
 
@@ -101,7 +135,7 @@ final class FontLocatorTest extends TestCase
 
     public function testItSkipsNonFileLeavesLikeSymlinksToDirectories(): void
     {
-        $root = self::temporaryDirectory('symlink-to-dir');
+        $root = $this->temporaryDirectory('symlink-to-dir');
         mkdir($root . '/target');
         file_put_contents($root . '/readable.ttf', '');
         symlink($root . '/target', $root . '/link-to-dir');
@@ -121,7 +155,7 @@ final class FontLocatorTest extends TestCase
 
     public function testItCombinesCustomAndSystemDirectories(): void
     {
-        $root = self::temporaryDirectory('combined');
+        $root = $this->temporaryDirectory('combined');
         file_put_contents($root . '/custom.ttf', '');
 
         $locator = new FontLocator([$root, ...FontLocator::standardSystemDirectories()]);
@@ -129,9 +163,9 @@ final class FontLocatorTest extends TestCase
         self::assertContains($root . '/custom.ttf', iterator_to_array($locator->fonts(), false));
     }
 
-    private static function temporaryDirectory(string $name): string
+    private function temporaryDirectory(string $name): string
     {
-        $directory = sys_get_temp_dir() . '/alto-font-locator-' . $name . '-' . bin2hex(random_bytes(4));
+        $directory = $this->temporaryRoot . '/' . $name;
 
         if (!mkdir($directory, 0777, true) && !is_dir($directory)) {
             self::fail(\sprintf('Could not create "%s".', $directory));

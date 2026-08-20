@@ -17,6 +17,10 @@ use Alto\Font\Exception\InvalidUnicodeRangeException;
 use Alto\Font\Text\UnicodeString;
 
 /**
+ * Represents an immutable set of Unicode codepoints.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @implements \IteratorAggregate<int, int>
  */
 final readonly class UnicodeSet implements \Countable, \IteratorAggregate

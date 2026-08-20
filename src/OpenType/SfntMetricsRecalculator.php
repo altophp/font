@@ -17,6 +17,10 @@ use Alto\Font\Binary\BinaryReader;
 use Alto\Font\Exception\InvalidFontException;
 
 /**
+ * Recalculates SFNT metrics after subsetting.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @internal
  */
 final readonly class SfntMetricsRecalculator

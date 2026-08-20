@@ -19,6 +19,10 @@ use Alto\Font\Exception\UnsupportedFontException;
 use Alto\Font\OpenType\Layout\ClassDefinitionTable;
 
 /**
+ * Compacts MERG glyph class definitions.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @internal
  */
 final readonly class MergCompactor

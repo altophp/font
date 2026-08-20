@@ -68,3 +68,5 @@ jobs:
       - name: Test process-backed WOFF2 paths
         run: vendor/bin/phpunit tests/Compression/BrotliProcessCompressorTest.php tests/Writer/Woff2WriterTest.php
       - run: composer validate-opentype
+        env:
+          OTS_PYTHON: python

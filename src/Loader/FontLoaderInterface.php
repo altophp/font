@@ -16,6 +16,8 @@ namespace Alto\Font\Loader;
 use Alto\Font\Font;
 
 /**
+ * Loads a selected face from a font file.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 interface FontLoaderInterface

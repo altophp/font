@@ -14,6 +14,8 @@ declare(strict_types=1);
 namespace Alto\Font\Tests\OpenType\Layout;
 
 use Alto\Font\Binary\BinaryReader;
+use Alto\Font\Exception\InvalidFontException;
+use Alto\Font\Exception\UnsupportedFontException;
 use Alto\Font\OpenType\Layout\ClassDefinitionTable;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
@@ -41,6 +43,43 @@ final class ClassDefinitionTableTest extends TestCase
             [2 => 1, 3 => 1, 7 => 3],
             ClassDefinitionTable::parse(new BinaryReader("\0\0" . $classes, 'built classes'), 0, 2),
         );
+    }
+
+    public function testItRejectsNullOffsets(): void
+    {
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('offset must not be NULL');
+
+        ClassDefinitionTable::parse(new BinaryReader('', 'null class definition'), 0, 0);
+    }
+
+    public function testItRejectsUnsupportedFormats(): void
+    {
+        $this->expectException(UnsupportedFontException::class);
+        $this->expectExceptionMessage('format 3 is not supported');
+
+        ClassDefinitionTable::parse(new BinaryReader("\0\0" . self::u16(3), 'unsupported class definition'), 0, 2);
+    }
+
+    public function testItRejectsOverlappingFormatTwoRanges(): void
+    {
+        $classes = self::u16(2)
+            . self::u16(2)
+            . self::u16(2) . self::u16(4) . self::u16(1)
+            . self::u16(4) . self::u16(5) . self::u16(2);
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('ranges are invalid or overlap');
+
+        ClassDefinitionTable::parse(new BinaryReader("\0\0" . $classes, 'overlapping classes'), 0, 2);
+    }
+
+    public function testItRejectsInvalidValuesWhenBuilding(): void
+    {
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('invalid glyph or class ID');
+
+        ClassDefinitionTable::build([0x10000 => 1]);
     }
 
     private static function u16(int $value): string

@@ -32,7 +32,7 @@ An index outside the collection raises `InvalidFontException`.
 
 ## WOFF2 decompression
 
-WOFF2 uses Brotli compression. Alto Font first uses the PHP Brotli extension
+WOFF2 uses Brotli compression. ALTO Font first uses the PHP Brotli extension
 when it is available, then falls back to the `brotli` command-line program.
 If neither is available, loading a WOFF2 file fails rather than silently
 returning incomplete data.

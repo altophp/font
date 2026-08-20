@@ -14,6 +14,8 @@ declare(strict_types=1);
 namespace Alto\Font\Descriptor;
 
 /**
+ * Represents a CSS-compatible font stretch.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class FontStretch

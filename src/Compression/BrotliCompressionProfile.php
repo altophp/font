@@ -13,6 +13,11 @@ declare(strict_types=1);
 
 namespace Alto\Font\Compression;
 
+/**
+ * Selects a Brotli compression quality profile.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ */
 enum BrotliCompressionProfile: int
 {
     case Fast = 5;

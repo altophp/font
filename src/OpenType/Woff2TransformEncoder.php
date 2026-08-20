@@ -17,6 +17,10 @@ use Alto\Font\Binary\BinaryReader;
 use Alto\Font\Exception\InvalidFontException;
 
 /**
+ * Encodes supported WOFF2 table transforms.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @internal
  */
 final readonly class Woff2TransformEncoder

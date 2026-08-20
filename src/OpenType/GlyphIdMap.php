@@ -16,7 +16,12 @@ namespace Alto\Font\OpenType;
 use Alto\Font\Exception\InvalidFontException;
 
 /**
- * Compact immutable mapping between source and subset glyph IDs.
+ * Maps source glyph identifiers to compact subset identifiers.
+ *
+ * The immutable mapping supports both forward lookup and source-order
+ * iteration while retaining the subset's dense glyph order.
+ *
+ * @author Simon André <smn.andre@gmail.com>
  *
  * @internal
  */

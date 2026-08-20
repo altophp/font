@@ -15,6 +15,11 @@ namespace Alto\Font\Writer;
 
 use Alto\Font\Font;
 
+/**
+ * Writes fonts as standalone SFNT data.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class SfntWriter
 {
     public function dump(Font $font): string

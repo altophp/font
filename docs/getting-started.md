@@ -8,7 +8,7 @@ use Alto\Font\Font;
 
 $font = Font::fromFile(__DIR__.'/fonts/Inter-Regular.ttf');
 $face = $font->face();
-$descriptor = $font->getDescriptor();
+$descriptor = $font->descriptor();
 
 printf(
     "%s %s, %d units per em\n",
@@ -20,10 +20,10 @@ printf(
 
 ## Inspect a character
 
-`getMetrics()` is the shortest route when you have exactly one character:
+`metrics()` is the shortest route when you have exactly one character:
 
 ```php
-$metrics = $font->getMetrics('A');
+$metrics = $font->metrics('A');
 
 echo $metrics->advanceWidth;
 echo $metrics->leftSideBearing;

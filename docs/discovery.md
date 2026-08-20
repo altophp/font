@@ -19,6 +19,14 @@ $font = $finder->get('Inter');
 Directories are searched recursively. Invalid and unsupported files are
 ignored while candidates are inspected.
 
+Inspect `diagnostics()` when skipped candidates should be reported or logged:
+
+```php
+foreach ($finder->diagnostics() as $path => $exception) {
+    // $path could not be loaded; $exception explains why.
+}
+```
+
 Use the method matching the absence policy of your application:
 
 ```php

@@ -37,7 +37,7 @@ final class WoffWriterTest extends TestCase
         self::assertSame('wOFF', substr($woff, 0, 4));
         self::assertSame(\strlen($woff), $reader->uint32(8));
         self::assertSame(\strlen($font->toSfnt()), $reader->uint32(16));
-        self::assertSame('Atelier Tiny', Font::fromFile(self::writeDump($woff))->getDescriptor()->family);
+        self::assertSame('Atelier Tiny', Font::fromFile(self::writeDump($woff))->descriptor()->family);
     }
 
     public function testItCompressesTablesOnlyWhenTheResultIsSmaller(): void
@@ -74,7 +74,7 @@ final class WoffWriterTest extends TestCase
 
         new WoffWriter()->write(Font::fromFile($source), $destination);
 
-        self::assertSame('Atelier Tiny', Font::fromFile($destination)->getDescriptor()->family);
+        self::assertSame('Atelier Tiny', Font::fromFile($destination)->descriptor()->family);
     }
 
     public function testItRemovesDsigWhenReconstructingTheFont(): void

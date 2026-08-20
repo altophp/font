@@ -15,6 +15,7 @@ namespace Alto\Font\Tests\Writer;
 
 use Alto\Font\Binary\BinaryReader;
 use Alto\Font\Compression\BrotliCompressorInterface;
+use Alto\Font\Compression\BrotliExtensionCompressor;
 use Alto\Font\Compression\BrotliProcessCompressor;
 use Alto\Font\Compression\BrotliStreamCompressorInterface;
 use Alto\Font\Exception\FontWriteException;
@@ -27,6 +28,7 @@ use Alto\Font\Tests\Fixtures\TinyTrueTypeFont;
 use Alto\Font\Writer\ExclusiveFileWriter;
 use Alto\Font\Writer\Woff2Writer;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\TestCase;
 
 #[CoversClass(Woff2Writer::class)]
@@ -56,7 +58,7 @@ final class Woff2WriterTest extends TestCase
         self::assertSame(0, \strlen($woff2) % 4);
         $destination = Font::fromFile(self::writeDump($woff2));
         self::assertSame(\strlen($destination->toSfnt()), $reader->uint32(16));
-        self::assertSame('Atelier Tiny', $destination->getDescriptor()->family);
+        self::assertSame('Atelier Tiny', $destination->descriptor()->family);
         self::assertSame(600, $destination->glyphMetrics(new GlyphId(1))->advanceWidth);
         self::assertCount(1, $destination->glyphOutline(new GlyphId(1))->contours);
         self::assertCount(1, $destination->glyphOutline(new GlyphId(4))->contours);
@@ -116,7 +118,7 @@ final class Woff2WriterTest extends TestCase
 
         self::assertSame(3, $entries[self::woff2EntryIndex($woff2, 'glyf')]['transformVersion']);
         self::assertSame(3, $entries[self::woff2EntryIndex($woff2, 'loca')]['transformVersion']);
-        self::assertSame('Atelier Tiny', Font::fromFile(self::writeDump($woff2))->getDescriptor()->family);
+        self::assertSame('Atelier Tiny', Font::fromFile(self::writeDump($woff2))->descriptor()->family);
     }
 
     public function testItKeepsTheGlyfTransformWithinShortLocaBounds(): void
@@ -129,7 +131,7 @@ final class Woff2WriterTest extends TestCase
 
         self::assertSame(0, $entries[self::woff2EntryIndex($woff2, 'glyf')]['transformVersion']);
         self::assertSame(0, $entries[self::woff2EntryIndex($woff2, 'loca')]['transformVersion']);
-        self::assertSame('Atelier Tiny', Font::fromFile(self::writeDump($woff2))->getDescriptor()->family);
+        self::assertSame('Atelier Tiny', Font::fromFile(self::writeDump($woff2))->descriptor()->family);
     }
 
     public function testItUsesNullTransformsForAZeroContourGlyphWithData(): void
@@ -141,7 +143,7 @@ final class Woff2WriterTest extends TestCase
 
         self::assertSame(3, self::woff2Entries($woff2)[self::woff2EntryIndex($woff2, 'glyf')]['transformVersion']);
         self::assertSame(3, self::woff2Entries($woff2)[self::woff2EntryIndex($woff2, 'loca')]['transformVersion']);
-        self::assertSame('Atelier Tiny', Font::fromFile(self::writeDump($woff2))->getDescriptor()->family);
+        self::assertSame('Atelier Tiny', Font::fromFile(self::writeDump($woff2))->descriptor()->family);
     }
 
     public function testItUsesNullTransformsForUnexpectedTrailingGlyphData(): void
@@ -159,7 +161,7 @@ final class Woff2WriterTest extends TestCase
 
             self::assertSame(3, self::woff2Entries($woff2)[self::woff2EntryIndex($woff2, 'glyf')]['transformVersion']);
             self::assertSame(3, self::woff2Entries($woff2)[self::woff2EntryIndex($woff2, 'loca')]['transformVersion']);
-            self::assertSame('Atelier Tiny', Font::fromFile(self::writeDump($woff2))->getDescriptor()->family);
+            self::assertSame('Atelier Tiny', Font::fromFile(self::writeDump($woff2))->descriptor()->family);
         }
     }
 
@@ -171,7 +173,19 @@ final class Woff2WriterTest extends TestCase
 
         new Woff2Writer(new BrotliProcessCompressor())->write(Font::fromFile($source), $destination);
 
-        self::assertSame('Atelier Tiny', Font::fromFile($destination)->getDescriptor()->family);
+        self::assertSame('Atelier Tiny', Font::fromFile($destination)->descriptor()->family);
+    }
+
+    #[RequiresPhpExtension('brotli')]
+    public function testItWritesWithANonStreamingCompressor(): void
+    {
+        $source = self::temporaryPath('source.ttf');
+        $destination = self::temporaryPath('extension.woff2');
+        TinyTrueTypeFont::write($source);
+
+        new Woff2Writer(new BrotliExtensionCompressor())->write(Font::fromFile($source), $destination);
+
+        self::assertSame('Atelier Tiny', Font::fromFile($destination)->descriptor()->family);
     }
 
     public function testWritingUsesTheStreamingCompressionBoundary(): void
@@ -201,7 +215,26 @@ final class Woff2WriterTest extends TestCase
 
         self::assertTrue($compressor->streamCalled);
         self::assertFalse($compressor->stringCalled);
-        self::assertSame('Atelier Tiny', Font::fromFile($destination)->getDescriptor()->family);
+        self::assertSame('Atelier Tiny', Font::fromFile($destination)->descriptor()->family);
+    }
+
+    public function testStreamingWritesRequiredContainerPadding(): void
+    {
+        $source = self::temporaryPath('scaled.ttf');
+        $destination = self::temporaryPath('scaled.woff2');
+        TinyTrueTypeFont::writeCompoundWithXYScale($source);
+
+        new Woff2Writer(new BrotliProcessCompressor())->write(Font::fromFile($source), $destination);
+        $woff2 = file_get_contents($destination);
+        self::assertIsString($woff2);
+        $directoryEnd = 0;
+        self::woff2Entries($woff2, $directoryEnd);
+        $compressedSize = (new BinaryReader($woff2, 'padded WOFF2'))->uint32(20);
+        $paddingLength = strlen($woff2) - $directoryEnd - $compressedSize;
+
+        self::assertGreaterThan(0, $paddingLength);
+        self::assertSame(str_repeat("\0", $paddingLength), substr($woff2, -$paddingLength));
+        self::assertSame('Atelier Tiny', Font::fromFile($destination)->descriptor()->family);
     }
 
     public function testItRemovesDsigAndSetsTheWoff2LosslessTransformFlag(): void
@@ -291,7 +324,7 @@ final class Woff2WriterTest extends TestCase
     /**
      * @return list<array{tag: string, originalLength: int, transformLength: ?int, transformVersion: int}>
      */
-    private static function woff2Entries(string $woff2): array
+    private static function woff2Entries(string $woff2, int &$directoryEnd = 0): array
     {
         $reader = new BinaryReader($woff2, 'test WOFF2 directory');
         $cursor = 48;
@@ -316,6 +349,8 @@ final class Woff2WriterTest extends TestCase
                 'transformVersion' => $transformVersion,
             ];
         }
+
+        $directoryEnd = $cursor;
 
         return $entries;
     }

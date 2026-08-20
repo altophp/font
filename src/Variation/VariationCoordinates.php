@@ -16,6 +16,8 @@ namespace Alto\Font\Variation;
 use Alto\Font\Variation\Table\AvarTable;
 
 /**
+ * Stores immutable user coordinates for variation axes.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class VariationCoordinates

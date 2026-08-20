@@ -15,6 +15,11 @@ namespace Alto\Font\Compression;
 
 use Alto\Font\Exception\CompressionException;
 
+/**
+ * Compresses WOFF2 table data with the Brotli PHP extension.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class BrotliExtensionCompressor implements BrotliCompressorInterface
 {
     public function __construct(private BrotliCompressionProfile $profile = BrotliCompressionProfile::Maximum) {}

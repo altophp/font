@@ -13,6 +13,11 @@ declare(strict_types=1);
 
 namespace Alto\Font\Subset;
 
+/**
+ * Defines immutable font subsetting policies.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class SubsetOptions
 {
     public function __construct(

@@ -17,6 +17,8 @@ use Alto\Font\Binary\BinaryReader;
 use Alto\Font\Exception\InvalidFontException;
 
 /**
+ * Parses and queries an OpenType character mapping table.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class CmapTable

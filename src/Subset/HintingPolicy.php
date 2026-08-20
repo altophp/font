@@ -13,6 +13,11 @@ declare(strict_types=1);
 
 namespace Alto\Font\Subset;
 
+/**
+ * Selects whether TrueType hinting is retained.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ */
 enum HintingPolicy
 {
     case Keep;

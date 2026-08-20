@@ -13,4 +13,9 @@ declare(strict_types=1);
 
 namespace Alto\Font\Exception;
 
+/**
+ * Reports an invalid Unicode range or set expression.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final class InvalidUnicodeRangeException extends \InvalidArgumentException implements FontExceptionInterface {}

@@ -20,6 +20,10 @@ use Alto\Font\Subset\HintingPolicy;
 use Alto\Font\Subset\LayoutPolicy;
 
 /**
+ * Compacts TrueType glyph data and dependent tables.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @internal
  */
 final readonly class GlyfCompactor

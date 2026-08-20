@@ -14,6 +14,10 @@ declare(strict_types=1);
 namespace Alto\Font\OpenType;
 
 /**
+ * Carries an internal TrueType subset result.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @internal
  */
 final readonly class GlyfSubset

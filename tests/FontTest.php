@@ -14,7 +14,9 @@ declare(strict_types=1);
 namespace Alto\Font\Tests;
 
 use Alto\Font\Binary\BinaryReader;
+use Alto\Font\Exception\GlyphNotFoundException;
 use Alto\Font\Exception\InvalidFontException;
+use Alto\Font\Exception\InvalidTextException;
 use Alto\Font\Exception\UnsupportedFontException;
 use Alto\Font\Font;
 use Alto\Font\Glyph\GlyphId;
@@ -57,7 +59,8 @@ final class FontTest extends TestCase
         $glyphId = new GlyphId(1);
 
         self::assertEquals($font->face(), $font->getFace());
-        self::assertSame('Atelier Tiny', $font->getDescriptor()->family);
+        self::assertEquals($font->descriptor(), $font->getDescriptor());
+        self::assertSame('Atelier Tiny', $font->descriptor()->family);
         self::assertSame('Atelier Tiny', $font->metadata()->family);
         self::assertSame('M 100 0 L 300 700 L 500 0 L 100 0 Z', self::describeContour($font->glyphOutline($glyphId)->contours[0]));
     }
@@ -88,8 +91,8 @@ final class FontTest extends TestCase
         self::assertSame('M 80 0 L 300 700 L 520 0 L 80 0 Z', self::describeContour($font->withVariations(['wght' => 900])->glyphOutline($glyphId)->contours[0]));
         self::assertSame('M 120 0 L 300 700 L 480 0 L 120 0 Z', self::describeContour($font->withVariations(['wdth' => 75])->glyphOutline($glyphId)->contours[0]));
         self::assertSame('M 100 0 L 300 700 L 500 0 L 100 0 Z', self::describeContour($font->withVariations(['wght' => 900, 'wdth' => 75])->glyphOutline($glyphId)->contours[0]));
-        self::assertSame(640, $font->withVariations(['wght' => 900])->getMetrics('A')->advanceWidth);
-        self::assertSame(520, $font->withVariations(['wdth' => 75])->getMetrics('A')->advanceWidth);
+        self::assertSame(640, $font->withVariations(['wght' => 900])->metrics('A')->advanceWidth);
+        self::assertSame(520, $font->withVariations(['wdth' => 75])->metrics('A')->advanceWidth);
     }
 
     public function testItAppliesVariationCoordinatesToCompoundGlyphComponents(): void
@@ -109,7 +112,7 @@ final class FontTest extends TestCase
     public function testItUsesComponentMetricsForVariableCompoundsWithUseMyMetrics(): void
     {
         $font = Font::fromFile(self::variableUseMyMetricsGvarFontPath())->withVariations(['wght' => 900]);
-        $metrics = $font->getMetrics('Á');
+        $metrics = $font->metrics('Á');
 
         self::assertSame(600, $metrics->advanceWidth);
         self::assertSame(10, $metrics->leftSideBearing);
@@ -126,17 +129,17 @@ final class FontTest extends TestCase
     {
         $font = Font::fromFile(self::variableHvarFontPath());
 
-        self::assertSame(700, $font->withVariations(['wght' => 900])->getMetrics('A')->advanceWidth);
-        self::assertSame(15, $font->withVariations(['wght' => 900])->getMetrics('A')->leftSideBearing);
-        self::assertSame(480, $font->withVariations(['wdth' => 75])->getMetrics('A')->advanceWidth);
-        self::assertSame(0, $font->withVariations(['wdth' => 75])->getMetrics('A')->leftSideBearing);
+        self::assertSame(700, $font->withVariations(['wght' => 900])->metrics('A')->advanceWidth);
+        self::assertSame(15, $font->withVariations(['wght' => 900])->metrics('A')->leftSideBearing);
+        self::assertSame(480, $font->withVariations(['wdth' => 75])->metrics('A')->advanceWidth);
+        self::assertSame(0, $font->withVariations(['wdth' => 75])->metrics('A')->leftSideBearing);
     }
 
     public function testItPrefersHvarOverGvarPhantomMetrics(): void
     {
         $font = Font::fromFile(self::variableHvarAndGvarFontPath())->withVariations(['wght' => 900]);
 
-        self::assertSame(700, $font->getMetrics('A')->advanceWidth);
+        self::assertSame(700, $font->metrics('A')->advanceWidth);
     }
 
     public function testItRejectsVariationsForStaticFonts(): void
@@ -203,23 +206,25 @@ final class FontTest extends TestCase
 
         self::assertSame(600, $font->glyphMetrics($glyphId)->advanceWidth);
         self::assertSame(600, $font->getGlyphMetrics($glyphId)->advanceWidth);
+        self::assertSame(600, $font->metrics($glyphId)->advanceWidth);
+        self::assertSame(600, $font->metrics('A')->advanceWidth);
         self::assertSame(600, $font->getMetrics($glyphId)->advanceWidth);
         self::assertSame(600, $font->getMetrics('A')->advanceWidth);
     }
 
     public function testItRejectsMetricsForRuns(): void
     {
-        $this->expectException(InvalidFontException::class);
+        $this->expectException(InvalidTextException::class);
 
-        Font::fromFile(self::fontPath())->getMetrics('AV');
+        Font::fromFile(self::fontPath())->metrics('AV');
     }
 
     public function testItRejectsMetricsForMissingCharacters(): void
     {
-        $this->expectException(InvalidFontException::class);
+        $this->expectException(GlyphNotFoundException::class);
         $this->expectExceptionMessage('Font has no glyph for codepoint U+0042.');
 
-        Font::fromFile(self::fontPath())->getMetrics('B');
+        Font::fromFile(self::fontPath())->metrics('B');
     }
 
     public function testItSubsetsStaticTrueTypeFontsByUnicodeWithoutRenumberingGlyphs(): void
@@ -230,7 +235,7 @@ final class FontTest extends TestCase
         self::assertSame(5, $result->originalGlyphCount);
         self::assertSame(2, $result->retainedGlyphCount);
         self::assertSame('M 100 0 L 300 700 L 500 0 L 100 0 Z', self::describeContour($result->font->glyphOutline(new GlyphId(1))->contours[0]));
-        self::assertSame(600, $result->font->getMetrics('A')->advanceWidth);
+        self::assertSame(600, $result->font->metrics('A')->advanceWidth);
         self::assertNull($result->font->glyphIdForCodepoint(86));
         self::assertSame(\strlen($result->font->toSfnt()), $result->sfntSize);
         self::assertSame(FontFormat::TrueType, $result->font->face()->format);
@@ -358,8 +363,8 @@ final class FontTest extends TestCase
 
         self::assertSame(2, $compact->font->face()->glyphCount);
         self::assertSame(1, $compact->font->glyphIdForCodepoint(86)?->value);
-        self::assertSame(610, $compact->font->getMetrics('V')->advanceWidth);
-        self::assertSame(20, $compact->font->getMetrics('V')->leftSideBearing);
+        self::assertSame(610, $compact->font->metrics('V')->advanceWidth);
+        self::assertSame(20, $compact->font->metrics('V')->leftSideBearing);
     }
 
     public function testItCompactsSupportedLayoutByDefault(): void
@@ -558,7 +563,7 @@ final class FontTest extends TestCase
         self::assertContains('gvar', $result->font->face()->tables);
         self::assertContains('HVAR', $result->font->face()->tables);
         self::assertSame('M 80 0 L 300 700 L 520 0 L 80 0 Z', self::describeContour($selected->glyphOutline(new GlyphId(1))->contours[0]));
-        self::assertSame(700, $selected->getMetrics('A')->advanceWidth);
+        self::assertSame(700, $selected->metrics('A')->advanceWidth);
         self::assertContains(
             'gvar glyph data is subset; axes and other variable tables are preserved with stable glyph IDs.',
             $result->warnings,
@@ -580,8 +585,8 @@ final class FontTest extends TestCase
         self::assertNotNull($selectedGlyphId);
 
         self::assertSame(2, $result->retainedGlyphCount);
-        self::assertSame($source->getMetrics('A')->advanceWidth, $selected->getMetrics('A')->advanceWidth);
-        self::assertSame($source->getMetrics('A')->leftSideBearing, $selected->getMetrics('A')->leftSideBearing);
+        self::assertSame($source->metrics('A')->advanceWidth, $selected->metrics('A')->advanceWidth);
+        self::assertSame($source->metrics('A')->leftSideBearing, $selected->metrics('A')->leftSideBearing);
         self::assertSame(
             self::describeContour($source->glyphOutline($sourceGlyphId)->contours[0]),
             self::describeContour($selected->glyphOutline($selectedGlyphId)->contours[0]),
@@ -605,7 +610,7 @@ final class FontTest extends TestCase
         self::assertNotNull($subsetGvar);
 
         self::assertLessThan(\strlen($sourceGvar), \strlen($subsetGvar));
-        self::assertSame(610, $result->font->withVariations(['wght' => 900])->getMetrics('V')->advanceWidth);
+        self::assertSame(610, $result->font->withVariations(['wght' => 900])->metrics('V')->advanceWidth);
     }
 
     public function testItDropsGlyphAndGlobalHintingDataExplicitly(): void

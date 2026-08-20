@@ -16,20 +16,21 @@ if (null === $glyphId) {
 `glyphIdForCodepoint()` returns `null` when the font's character map has no
 entry. It does not perform font fallback.
 
-When working with one character, `getMetrics()` resolves it and reports a
+When working with one character, `metrics()` resolves it and reports a
 clear failure if it is absent:
 
 ```php
-$metrics = $font->getMetrics('A');
+$metrics = $font->metrics('A');
 
 echo $metrics->glyphId->value;
 echo $metrics->advanceWidth;
 echo $metrics->leftSideBearing;
 ```
 
-Passing an empty string, more than one Unicode code point, or a missing
-character raises `InvalidFontException`. Use the explicit code-point method
-when absence is expected.
+Passing invalid UTF-8, an empty string, or more than one Unicode code point
+raises `InvalidTextException`. A valid character absent from the font raises
+`GlyphNotFoundException`. Use the explicit code-point method when absence is
+expected.
 
 ## Read metrics by identifier
 
@@ -59,7 +60,7 @@ foreach ($outline->contours as $contour) {
 ```
 
 `M`, `L`, `Q`, and `Z` represent move, line, quadratic curve, and close-path
-commands. Alto Font exposes this neutral geometry without serializing it to
+commands. ALTO Font exposes this neutral geometry without serializing it to
 SVG, a bitmap, or another drawing format.
 
 ## Transform geometry

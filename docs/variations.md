@@ -37,7 +37,7 @@ $boldCondensed = $font->withVariations([
 ]);
 
 $coordinates = $boldCondensed->variationCoordinates();
-$metrics = $boldCondensed->getMetrics('A');
+$metrics = $boldCondensed->metrics('A');
 ```
 
 `withVariations()` is immutable: the original font remains at its default

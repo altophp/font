@@ -18,6 +18,10 @@ use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\Exception\UnsupportedFontException;
 
 /**
+ * Parses and builds OpenType class definition tables.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @internal
  */
 final readonly class ClassDefinitionTable

@@ -16,6 +16,7 @@ namespace Alto\Font\Tests;
 use Alto\Font\Descriptor\FontStretch;
 use Alto\Font\Descriptor\FontStyle;
 use Alto\Font\Exception\FontNotFoundException;
+use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\Font;
 use Alto\Font\FontFinder;
 use Alto\Font\FontQuery;
@@ -36,7 +37,7 @@ final class FontFinderTest extends TestCase
         self::assertTrue($finder->has(FontQuery::family('Atelier Tiny')->weight(400)));
         self::assertFalse($finder->has('Missing'));
         self::assertInstanceOf(Font::class, $finder->find('Atelier Tiny'));
-        self::assertSame('Atelier Tiny', $finder->get('Atelier Tiny')->getDescriptor()->family);
+        self::assertSame('Atelier Tiny', $finder->get('Atelier Tiny')->descriptor()->family);
     }
 
     public function testItThrowsWhenRequiredFontIsMissing(): void
@@ -72,12 +73,15 @@ final class FontFinderTest extends TestCase
 
     public function testItSkipsInvalidCandidates(): void
     {
+        $invalidPath = '/path/that/does/not/exist.ttf';
         $finder = FontFinder::fromLocator(self::locator(
-            '/path/that/does/not/exist.ttf',
+            $invalidPath,
             self::tinyFontPath('finder-invalid-candidate'),
         ));
 
         self::assertTrue($finder->has('Atelier Tiny'));
+        self::assertArrayHasKey($invalidPath, $finder->diagnostics());
+        self::assertInstanceOf(InvalidFontException::class, $finder->diagnostics()[$invalidPath]);
     }
 
     public function testItAcceptsShortcutWeightAndStyleArguments(): void
@@ -106,8 +110,8 @@ final class FontFinderTest extends TestCase
         );
 
         self::assertSame(['wght' => 800.0, 'wdth' => 75.0], $font->variationCoordinates()?->values);
-        self::assertSame(560, $font->getMetrics('A')->advanceWidth);
-        self::assertSame(4, $font->getMetrics('A')->leftSideBearing);
+        self::assertSame(560, $font->metrics('A')->advanceWidth);
+        self::assertSame(4, $font->metrics('A')->leftSideBearing);
     }
 
     public function testItPrefersVariableCandidatesOverApproximateStaticCandidates(): void
@@ -120,7 +124,7 @@ final class FontFinderTest extends TestCase
         );
 
         self::assertSame(['wght' => 800.0, 'wdth' => 100.0], $font->variationCoordinates()?->values);
-        self::assertSame(680, $font->getMetrics('A')->advanceWidth);
+        self::assertSame(680, $font->metrics('A')->advanceWidth);
     }
 
     public function testItCreatesDirectoryAndSystemFinders(): void

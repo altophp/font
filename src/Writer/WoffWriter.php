@@ -14,10 +14,15 @@ declare(strict_types=1);
 namespace Alto\Font\Writer;
 
 use Alto\Font\Binary\BinaryReader;
-use Alto\Font\Exception\FontWriteException;
+use Alto\Font\Exception\CompressionException;
 use Alto\Font\Font;
 use Alto\Font\OpenType\SfntChecksum;
 
+/**
+ * Writes fonts as WOFF 1 data.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ */
 final readonly class WoffWriter
 {
     public function dump(Font $font): string
@@ -55,7 +60,7 @@ final readonly class WoffWriter
             $compressed = gzcompress($table, 6);
 
             if (!\is_string($compressed)) {
-                throw new FontWriteException(\sprintf('Unable to compress SFNT table "%s".', $tag));
+                throw new CompressionException(\sprintf('Unable to compress SFNT table "%s".', $tag));
             }
 
             if (\strlen($compressed) >= $originalLength) {

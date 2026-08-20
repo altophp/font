@@ -16,6 +16,10 @@ namespace Alto\Font\Writer;
 use Alto\Font\Exception\FontWriteException;
 
 /**
+ * Writes new font files without replacing existing paths.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @internal
  */
 final readonly class ExclusiveFileWriter

@@ -13,6 +13,11 @@ declare(strict_types=1);
 
 namespace Alto\Font\Compression;
 
+/**
+ * Compresses WOFF2 table data between open streams.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ */
 interface BrotliStreamCompressorInterface extends BrotliCompressorInterface
 {
     /**

@@ -17,6 +17,8 @@ use Alto\Font\Font;
 use Alto\Font\OpenType\SfntFont;
 
 /**
+ * Loads font files into the public font API.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class FontLoader implements FontLoaderInterface

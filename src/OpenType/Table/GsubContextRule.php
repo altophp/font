@@ -14,6 +14,10 @@ declare(strict_types=1);
 namespace Alto\Font\OpenType\Table;
 
 /**
+ * Carries one parsed contextual substitution rule.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @internal
  */
 final readonly class GsubContextRule

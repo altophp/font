@@ -24,6 +24,10 @@ use Alto\Font\Subset\LayoutPolicy;
 use Alto\Font\Subset\SubsetOptions;
 
 /**
+ * Builds conservative TrueType Unicode subsets.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @internal
  */
 final readonly class GlyfSubsetter

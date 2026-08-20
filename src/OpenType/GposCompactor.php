@@ -20,6 +20,10 @@ use Alto\Font\OpenType\Layout\ClassDefinitionTable;
 use Alto\Font\OpenType\Layout\CoverageTable;
 
 /**
+ * Remaps supported GPOS structures to compact glyph identifiers.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @internal
  */
 final readonly class GposCompactor

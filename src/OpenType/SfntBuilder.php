@@ -16,6 +16,10 @@ namespace Alto\Font\OpenType;
 use Alto\Font\Exception\InvalidFontException;
 
 /**
+ * Builds standalone SFNT data from font tables.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @internal
  */
 final readonly class SfntBuilder

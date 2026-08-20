@@ -13,7 +13,7 @@ declare(strict_types=1);
 
 namespace Alto\Font\Tests\Text;
 
-use Alto\Font\Exception\InvalidFontException;
+use Alto\Font\Exception\InvalidTextException;
 use Alto\Font\Text\UnicodeString;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
@@ -28,7 +28,7 @@ final class UnicodeStringTest extends TestCase
 
     public function testItRejectsInvalidUtf8(): void
     {
-        $this->expectException(InvalidFontException::class);
+        $this->expectException(InvalidTextException::class);
         $this->expectExceptionMessage('Text must be valid UTF-8.');
 
         UnicodeString::codepoints("\xFF");

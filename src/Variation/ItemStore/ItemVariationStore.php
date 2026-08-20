@@ -19,6 +19,8 @@ use Alto\Font\Variation\FontVariations;
 use Alto\Font\Variation\NormalizedCoordinates;
 
 /**
+ * Evaluates deltas from an OpenType item variation store.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class ItemVariationStore

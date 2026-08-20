@@ -16,6 +16,10 @@ namespace Alto\Font\OpenType;
 use Alto\Font\Exception\InvalidFontException;
 
 /**
+ * Maps WOFF2 known table tag indexes.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @internal
  */
 final readonly class Woff2KnownTags

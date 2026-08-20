@@ -17,6 +17,8 @@ use Alto\Font\Binary\BinaryReader;
 use Alto\Font\Exception\InvalidFontException;
 
 /**
+ * Maps glyph identifiers to variation delta set indexes.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class DeltaSetIndexMap
