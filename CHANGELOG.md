@@ -2,7 +2,8 @@
 
 ## [Unreleased]
 
-- Add documentation.
+## [0.9.0]
+
 - Write supported faces as standalone SFNT, WOFF, and WOFF2 files.
 - Create conservative Unicode subsets with optional glyph compaction, layout
   preservation, and hint removal.
@@ -11,6 +12,7 @@
 - Add native and process-backed Brotli compression adapters for WOFF2 output.
 - Add canonical `descriptor()` and `metrics()` APIs, font-discovery diagnostics,
   and dedicated text and missing-glyph exceptions.
+- Document font data, conversion, compression, and subsetting workflows.
 
 ## [0.8.0]
 
