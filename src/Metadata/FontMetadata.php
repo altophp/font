@@ -17,6 +17,8 @@ use Alto\Font\Descriptor\FontDescriptor;
 use Alto\Font\FontFace;
 
 /**
+ * Exposes names, descriptors, and licensing metadata for a font.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class FontMetadata
@@ -46,7 +48,7 @@ final readonly class FontMetadata
         return new self(
             family: $descriptor->family,
             subfamily: $descriptor->subfamily,
-            format: FontFormat::fromPath($face->path),
+            format: FontFormat::Unknown === $face->format ? FontFormat::fromPath($face->path) : $face->format,
             descriptor: $descriptor,
             fullName: $descriptor->fullName,
             postScriptName: $descriptor->postScriptName,

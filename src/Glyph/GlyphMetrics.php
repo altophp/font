@@ -14,6 +14,8 @@ declare(strict_types=1);
 namespace Alto\Font\Glyph;
 
 /**
+ * Exposes horizontal metrics for one glyph.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class GlyphMetrics

@@ -8,7 +8,7 @@ use Alto\Font\Font;
 
 $font = Font::fromFile(__DIR__.'/fonts/Inter-Regular.ttf');
 $face = $font->face();
-$descriptor = $font->getDescriptor();
+$descriptor = $font->descriptor();
 
 printf(
     "%s %s, %d units per em\n",
@@ -20,10 +20,10 @@ printf(
 
 ## Inspect a character
 
-`getMetrics()` is the shortest route when you have exactly one character:
+`metrics()` is the shortest route when you have exactly one character:
 
 ```php
-$metrics = $font->getMetrics('A');
+$metrics = $font->metrics('A');
 
 echo $metrics->advanceWidth;
 echo $metrics->leftSideBearing;
@@ -53,5 +53,5 @@ foreach ($outline->contours as $contour) {
 The outline contains generic move, line, quadratic-curve, and close commands.
 It is geometry, not an SVG or another rendered format.
 
-Continue with [Metadata](metadata.md), [Glyphs](glyphs.md), or
-[Discovery](discovery.md), depending on the job your application performs.
+Continue with [Font basics](fonts.md), [Font files](font-files.md), or
+[Font data](font-data.md), depending on the job your application performs.

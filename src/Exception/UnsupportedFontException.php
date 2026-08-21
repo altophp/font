@@ -14,6 +14,8 @@ declare(strict_types=1);
 namespace Alto\Font\Exception;
 
 /**
+ * Reports a valid font feature that is not supported.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final class UnsupportedFontException extends \RuntimeException implements FontExceptionInterface {}

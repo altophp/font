@@ -18,6 +18,8 @@ use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\Variation\FontVariations;
 
 /**
+ * Maps normalized coordinates through an avar table.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class AvarTable

@@ -14,6 +14,8 @@ declare(strict_types=1);
 namespace Alto\Font\Glyph;
 
 /**
+ * Represents one neutral glyph path command.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class PathCommand

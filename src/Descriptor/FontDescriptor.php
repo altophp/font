@@ -16,6 +16,8 @@ namespace Alto\Font\Descriptor;
 use Alto\Font\FontFace;
 
 /**
+ * Describes the names and CSS matching properties of a font.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class FontDescriptor

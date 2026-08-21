@@ -19,6 +19,14 @@ $font = $finder->get('Inter');
 Directories are searched recursively. Invalid and unsupported files are
 ignored while candidates are inspected.
 
+Inspect `diagnostics()` when skipped candidates should be reported or logged:
+
+```php
+foreach ($finder->diagnostics() as $path => $exception) {
+    // $path could not be loaded; $exception explains why.
+}
+```
+
 Use the method matching the absence policy of your application:
 
 ```php
@@ -88,3 +96,8 @@ $finder = FontFinder::fromLocator($locator);
 
 The locator yields local file paths. Loading and candidate caching remain the
 finder's responsibility.
+
+`FontFinder` evaluates the first face of a TTC or OTC candidate. Load a
+different collection face explicitly with `Font::fromFile($path, faceIndex: 1)`.
+The finder selects the best match; it is not a public font-catalog enumeration
+API.

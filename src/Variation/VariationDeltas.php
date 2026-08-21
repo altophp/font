@@ -14,6 +14,8 @@ declare(strict_types=1);
 namespace Alto\Font\Variation;
 
 /**
+ * Stores point deltas produced by font variations.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class VariationDeltas

@@ -14,6 +14,8 @@ declare(strict_types=1);
 namespace Alto\Font\Variation;
 
 /**
+ * Describes one named variable font instance.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class VariationInstance

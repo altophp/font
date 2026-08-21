@@ -22,6 +22,107 @@ final class TinyTrueTypeFont
         file_put_contents($path, self::sfnt(self::tables($compoundCycle, $unsupportedCff)));
     }
 
+    public static function writeWithDsig(string $path): void
+    {
+        $tables = self::tables(compoundCycle: false, unsupportedCff: false);
+        $tables['DSIG'] = str_repeat("\0", 8);
+        ksort($tables);
+
+        file_put_contents($path, self::sfnt($tables));
+    }
+
+    public static function writeWithOs2(string $path): void
+    {
+        $tables = self::tables(compoundCycle: false, unsupportedCff: false);
+        $tables['OS/2'] = self::os2();
+        ksort($tables);
+
+        file_put_contents($path, self::sfnt($tables));
+    }
+
+    public static function writeWithCubicPoint(string $path): void
+    {
+        $glyph = self::simpleGlyph([[100, 0], [300, 700], [500, 0]]);
+        $glyph[14] = \chr(\ord($glyph[14]) | 0x80);
+
+        file_put_contents($path, self::sfnt(self::tables(
+            compoundCycle: false,
+            unsupportedCff: false,
+            firstGlyph: $glyph,
+        )));
+    }
+
+    public static function writeWithExpandingShortLoca(string $path): void
+    {
+        file_put_contents($path, self::sfnt(self::tables(
+            compoundCycle: false,
+            unsupportedCff: false,
+            firstGlyph: self::repeatedPointGlyph(26200),
+            shortLoca: true,
+        )));
+    }
+
+    public static function writeWithZeroContourGlyphData(string $path): void
+    {
+        $glyph = self::i16(0) . str_repeat("\0", 8) . self::u16(1) . "\xB0";
+
+        file_put_contents($path, self::sfnt(self::tables(
+            compoundCycle: false,
+            unsupportedCff: false,
+            firstGlyph: $glyph,
+        )));
+    }
+
+    public static function writeWithTrailingSimpleGlyphData(string $path): void
+    {
+        $glyph = self::simpleGlyph([[100, 0], [300, 700], [500, 0]]) . "\xA5";
+
+        file_put_contents($path, self::sfnt(self::tables(
+            compoundCycle: false,
+            unsupportedCff: false,
+            firstGlyph: $glyph,
+        )));
+    }
+
+    public static function writeWithTrailingCompositeGlyphData(string $path): void
+    {
+        $glyph = self::compoundGlyph(1, 50, 0) . "\xA5";
+
+        file_put_contents($path, self::sfnt(self::tables(
+            compoundCycle: false,
+            unsupportedCff: false,
+            compoundGlyph: $glyph,
+        )));
+    }
+
+    public static function writeWithGsubSingleSubstitution(string $path): void
+    {
+        self::writeWithGsub($path, self::gsub(1, self::singleSubstitution(1, 2)));
+    }
+
+    public static function writeWithGsubLigatureSubstitution(string $path): void
+    {
+        self::writeWithGsub($path, self::gsub(4, self::ligatureSubstitution(1, 2, 4)));
+    }
+
+    public static function writeWithGsubExtensionSubstitution(string $path): void
+    {
+        $single = self::singleSubstitution(1, 2);
+        $extension = self::u16(1) . self::u16(1) . self::u32(8) . $single;
+
+        self::writeWithGsub($path, self::gsub(7, $extension));
+    }
+
+    public static function writeWithUnsupportedGsubLookup(string $path): void
+    {
+        self::writeWithGsub($path, self::gsub(6, self::u16(4)));
+    }
+
+    public static function writeWithUnsupportedGsubFormat(string $path): void
+    {
+        self::writeWithGsub($path, self::gsub(1, self::u16(3)));
+    }
+
     public static function writePointMatchedCompound(string $path): void
     {
         file_put_contents($path, self::sfnt(self::tables(compoundCycle: false, unsupportedCff: false, pointMatched: true)));
@@ -75,6 +176,34 @@ final class TinyTrueTypeFont
             unsupportedCff: false,
             compoundGlyph: self::compoundGlyph(1, 50, 0, extraFlags: 0x0100, instructions: "\xB0\x00"),
         )));
+    }
+
+    public static function writeHinted(string $path): void
+    {
+        $tables = self::tables(
+            compoundCycle: false,
+            unsupportedCff: false,
+            compoundGlyph: self::compoundGlyph(1, 50, 0, extraFlags: 0x0100, instructions: "\xB0\x00"),
+        );
+        $tables['cvar'] = "\0\1\0\0";
+        $tables['cvt '] = "\0\0";
+        $tables['fpgm'] = "\xB0\x00";
+        $tables['hdmx'] = "\0\0\0\0";
+        $tables['LTSH'] = "\0\0\0\0";
+        $tables['prep'] = "\xB0\x00";
+        $tables['VDMX'] = "\0\0\0\0";
+        ksort($tables);
+
+        file_put_contents($path, self::sfnt($tables));
+    }
+
+    public static function writeWithTable(string $path, string $tag): void
+    {
+        $tables = self::tables(compoundCycle: false, unsupportedCff: false);
+        $tables[$tag] = "\0\0\0\0";
+        ksort($tables);
+
+        file_put_contents($path, self::sfnt($tables));
     }
 
     public static function writeVariable(string $path): void
@@ -266,7 +395,8 @@ final class TinyTrueTypeFont
             throw new \RuntimeException('The brotli binary is required to generate the WOFF2 fixture.');
         }
 
-        $length = 48 + \strlen($directory) + \strlen($compressedData);
+        $contentLength = 48 + \strlen($directory) + \strlen($compressedData);
+        $length = ($contentLength + 3) & ~3;
 
         file_put_contents(
             $path,
@@ -281,7 +411,8 @@ final class TinyTrueTypeFont
                 . self::u16(0)
                 . str_repeat("\0", 20)
                 . $directory
-                . $compressedData,
+                . $compressedData
+                . str_repeat("\0", $length - $contentLength),
         );
     }
 
@@ -312,9 +443,10 @@ final class TinyTrueTypeFont
             throw new \RuntimeException('The brotli binary is required to generate the WOFF2 fixture.');
         }
 
-        $length = 48 + \strlen($directory) + \strlen($compressedData);
+        $contentLength = 48 + \strlen($directory) + \strlen($compressedData);
+        $length = ($contentLength + 3) & ~3;
 
-        file_put_contents($path, 'wOF2'."\x00\x01\x00\x00".self::u32($length).self::u16(\count($tables)).self::u16(0).self::u32(0).self::u32(\strlen($compressedData)).self::u16(1).self::u16(0).str_repeat("\0", 20).$directory.$compressedData);
+        file_put_contents($path, 'wOF2'."\x00\x01\x00\x00".self::u32($length).self::u16(\count($tables)).self::u16(0).self::u32(0).self::u32(\strlen($compressedData)).self::u16(1).self::u16(0).str_repeat("\0", 20).$directory.$compressedData.str_repeat("\0", $length - $contentLength));
     }
 
     public static function hasBrotliEncoder(): bool
@@ -332,10 +464,12 @@ final class TinyTrueTypeFont
         bool $pointMatched = false,
         int $unitsPerEm = 1000,
         ?string $compoundGlyph = null,
+        ?string $firstGlyph = null,
+        bool $shortLoca = false,
     ): array {
         $glyphs = [
             '',
-            self::simpleGlyph([[100, 0], [300, 700], [500, 0]]),
+            $firstGlyph ?? self::simpleGlyph([[100, 0], [300, 700], [500, 0]]),
             self::simpleGlyph([[100, 700], [300, 0], [500, 700]]),
             self::simpleGlyph([[80, 0], [80, 700], [420, 700], [420, 0]]),
             $compoundGlyph ?? match (true) {
@@ -358,10 +492,10 @@ final class TinyTrueTypeFont
         $tables = [
             'cmap' => self::cmap(),
             'glyf' => $glyf,
-            'head' => self::head($unitsPerEm),
+            'head' => self::head($unitsPerEm, $shortLoca ? 0 : 1),
             'hhea' => self::hhea(),
             'hmtx' => self::hmtx(),
-            'loca' => self::loca($loca),
+            'loca' => self::loca($loca, $shortLoca),
             'maxp' => self::maxp(),
             'name' => self::name(),
         ];
@@ -373,6 +507,68 @@ final class TinyTrueTypeFont
         ksort($tables);
 
         return $tables;
+    }
+
+    private static function writeWithGsub(string $path, string $gsub): void
+    {
+        $tables = self::tables(compoundCycle: false, unsupportedCff: false);
+        $tables['GSUB'] = $gsub;
+        ksort($tables);
+
+        file_put_contents($path, self::sfnt($tables));
+    }
+
+    private static function gsub(int $lookupType, string $subtable): string
+    {
+        $lookup = self::u16($lookupType)
+            . self::u16(0)
+            . self::u16(1)
+            . self::u16(8)
+            . $subtable;
+        $lookupList = self::u16(1) . self::u16(4) . $lookup;
+        $feature = self::u16(0) . self::u16(1) . self::u16(0);
+        $featureList = self::u16(1) . 'test' . self::u16(8) . $feature;
+
+        return self::u16(1)
+            . self::u16(0)
+            . self::u16(10)
+            . self::u16(12)
+            . self::u16(12 + \strlen($featureList))
+            . self::u16(0)
+            . $featureList
+            . $lookupList;
+    }
+
+    private static function singleSubstitution(int $inputGlyphId, int $outputGlyphId): string
+    {
+        return self::u16(2)
+            . self::u16(8)
+            . self::u16(1)
+            . self::u16($outputGlyphId)
+            . self::coverage($inputGlyphId);
+    }
+
+    private static function ligatureSubstitution(int $firstGlyphId, int $secondGlyphId, int $ligatureGlyphId): string
+    {
+        $ligatureSet = self::u16(1)
+            . self::u16(4)
+            . self::u16($ligatureGlyphId)
+            . self::u16(2)
+            . self::u16($secondGlyphId);
+
+        return self::u16(1)
+            . self::u16(8 + \strlen($ligatureSet))
+            . self::u16(1)
+            . self::u16(8)
+            . $ligatureSet
+            . self::coverage($firstGlyphId);
+    }
+
+    private static function coverage(int ...$glyphIds): string
+    {
+        return self::u16(1)
+            . self::u16(\count($glyphIds))
+            . implode('', array_map(self::u16(...), $glyphIds));
     }
 
     /**
@@ -417,7 +613,8 @@ final class TinyTrueTypeFont
                 $compressed = $table;
             }
 
-            $records .= $tag.self::u32($offset).self::u32(\strlen($compressed)).self::u32(\strlen($table)).self::u32(0);
+            $checksumData = 'head' === $tag ? substr_replace($table, "\0\0\0\0", 8, 4) : $table;
+            $records .= $tag.self::u32($offset).self::u32(\strlen($compressed)).self::u32(\strlen($table)).self::u32(self::checksum($checksumData));
             $padded = self::align4($compressed);
             $data .= $padded;
             $offset += \strlen($padded);
@@ -469,7 +666,8 @@ final class TinyTrueTypeFont
             throw new \RuntimeException('The brotli binary is required to generate the WOFF2 fixture.');
         }
 
-        $length = 48 + \strlen($directory) + \strlen($compressedData);
+        $contentLength = 48 + \strlen($directory) + \strlen($compressedData);
+        $length = ($contentLength + 3) & ~3;
 
         return 'wOF2'
             ."\x00\x01\x00\x00"
@@ -482,28 +680,29 @@ final class TinyTrueTypeFont
             .self::u16(0)
             .str_repeat("\0", 20)
             .$directory
-            .$compressedData;
+            .$compressedData
+            .str_repeat("\0", $length - $contentLength);
     }
 
     /**
      * @param list<int> $offsets
      */
-    private static function loca(array $offsets): string
+    private static function loca(array $offsets, bool $short = false): string
     {
         $data = '';
 
         foreach ($offsets as $offset) {
-            $data .= self::u32($offset);
+            $data .= $short ? self::u16(intdiv($offset, 2)) : self::u32($offset);
         }
 
         return $data;
     }
 
-    private static function head(int $unitsPerEm = 1000): string
+    private static function head(int $unitsPerEm = 1000, int $indexFormat = 1): string
     {
         $data = str_repeat("\0", 54);
         self::put($data, 18, self::u16($unitsPerEm));
-        self::put($data, 50, self::i16(1));
+        self::put($data, 50, self::i16($indexFormat));
 
         return $data;
     }
@@ -538,7 +737,18 @@ final class TinyTrueTypeFont
 
     private static function maxp(): string
     {
-        return "\x00\x01\x00\x00".self::u16(5);
+        return "\x00\x01\x00\x00".self::u16(5).str_repeat("\0", 26);
+    }
+
+    private static function os2(): string
+    {
+        $data = str_repeat("\0", 96);
+        self::put($data, 0, self::u16(4));
+        self::put($data, 42, str_repeat("\xFF", 16));
+        self::put($data, 64, self::u16(0));
+        self::put($data, 66, self::u16(0xFFFF));
+
+        return $data;
     }
 
     private static function name(): string
@@ -869,6 +1079,23 @@ final class TinyTrueTypeFont
             .$yCoordinates;
     }
 
+    private static function repeatedPointGlyph(int $pointCount): string
+    {
+        $flags = '';
+
+        for ($remaining = $pointCount; $remaining > 0;) {
+            $runLength = min($remaining, 256);
+            $flags .= $runLength > 1 ? "\x39" . \chr($runLength - 1) : "\x31";
+            $remaining -= $runLength;
+        }
+
+        return self::i16(1)
+            . str_repeat("\0", 8)
+            . self::u16($pointCount - 1)
+            . self::u16(0)
+            . $flags;
+    }
+
     private static function compoundGlyph(
         int $glyphId,
         int $dx,
@@ -947,6 +1174,24 @@ final class TinyTrueTypeFont
     private static function u32(int $value): string
     {
         return pack('N', $value);
+    }
+
+    private static function checksum(string $data): int
+    {
+        $data = self::align4($data);
+        $sum = 0;
+
+        for ($offset = 0, $length = \strlen($data); $offset < $length; $offset += 4) {
+            $word = unpack('Nvalue', substr($data, $offset, 4));
+
+            if (!\is_array($word)) {
+                throw new \LogicException('Could not calculate fixture checksum.');
+            }
+
+            $sum = ($sum + $word['value']) & 0xFFFFFFFF;
+        }
+
+        return $sum;
     }
 
     private static function fixed(float $value): string

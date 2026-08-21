@@ -14,22 +14,35 @@ declare(strict_types=1);
 namespace Alto\Font;
 
 use Alto\Font\Descriptor\FontDescriptor;
+use Alto\Font\Exception\GlyphNotFoundException;
 use Alto\Font\Exception\InvalidFontException;
+use Alto\Font\Exception\InvalidTextException;
+use Alto\Font\Exception\UnsupportedFontException;
 use Alto\Font\Glyph\GlyphId;
 use Alto\Font\Glyph\GlyphMetrics;
 use Alto\Font\Glyph\GlyphOutline;
 use Alto\Font\Loader\FontLoader;
 use Alto\Font\Metadata\FontMetadata;
+use Alto\Font\OpenType\SfntDocument;
 use Alto\Font\OpenType\SfntFont;
+use Alto\Font\Subset\SubsetOptions;
+use Alto\Font\Subset\SubsetResult;
 use Alto\Font\Text\UnicodeString;
 use Alto\Font\Variation\FontVariations;
 use Alto\Font\Variation\VariationCoordinates;
 
 /**
+ * Provides the primary API for inspecting and transforming one font face.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class Font
 {
+    /**
+     * Builds a font facade around an internal parsed face.
+     *
+     * @internal
+     */
     public function __construct(
         private SfntFont $font,
         private ?VariationCoordinates $variationCoordinates = null,
@@ -45,14 +58,25 @@ final readonly class Font
         return $this->font->face();
     }
 
+    /**
+     * @deprecated Use face() instead.
+     */
     public function getFace(): FontFace
     {
         return $this->face();
     }
 
-    public function getDescriptor(): FontDescriptor
+    public function descriptor(): FontDescriptor
     {
         return FontDescriptor::fromFace($this->face());
+    }
+
+    /**
+     * @deprecated Use descriptor() instead.
+     */
+    public function getDescriptor(): FontDescriptor
+    {
+        return $this->descriptor();
     }
 
     public function metadata(): FontMetadata
@@ -88,6 +112,11 @@ final readonly class Font
         return $this->variationCoordinates;
     }
 
+    public function withoutVariations(): self
+    {
+        return null === $this->variationCoordinates ? $this : new self($this->font);
+    }
+
     public function glyphIdForCodepoint(int $codepoint): ?GlyphId
     {
         return $this->font->glyphIdForCodepoint($codepoint);
@@ -98,12 +127,23 @@ final readonly class Font
         return $this->font->glyphMetrics($glyphId, $this->variationCoordinates);
     }
 
+    /**
+     * @deprecated Use glyphMetrics() instead.
+     */
     public function getGlyphMetrics(GlyphId $glyphId): GlyphMetrics
     {
         return $this->glyphMetrics($glyphId);
     }
 
+    /**
+     * @deprecated Use metrics() instead.
+     */
     public function getMetrics(GlyphId|string $glyph): GlyphMetrics
+    {
+        return $this->metrics($glyph);
+    }
+
+    public function metrics(GlyphId|string $glyph): GlyphMetrics
     {
         if ($glyph instanceof GlyphId) {
             return $this->glyphMetrics($glyph);
@@ -112,13 +152,13 @@ final readonly class Font
         $codepoints = UnicodeString::codepoints($glyph);
 
         if (1 !== \count($codepoints)) {
-            throw new InvalidFontException('Font metrics can only be read for a single glyph or character.');
+            throw new InvalidTextException('Font metrics can only be read for a single glyph or character.');
         }
 
         $glyphId = $this->glyphIdForCodepoint($codepoints[0]);
 
         if (null === $glyphId) {
-            throw new InvalidFontException(\sprintf('Font has no glyph for codepoint U+%04X.', $codepoints[0]));
+            throw new GlyphNotFoundException(\sprintf('Font has no glyph for codepoint U+%04X.', $codepoints[0]));
         }
 
         return $this->glyphMetrics($glyphId);
@@ -127,5 +167,48 @@ final readonly class Font
     public function glyphOutline(GlyphId $glyphId): GlyphOutline
     {
         return $this->font->glyphOutline($glyphId, $this->variationCoordinates);
+    }
+
+    public function toSfnt(): string
+    {
+        if (null !== $this->variationCoordinates) {
+            throw new UnsupportedFontException('Writing a selected variable-font instance is not supported yet.');
+        }
+
+        return $this->font->toSfnt();
+    }
+
+    /**
+     * @internal
+     */
+    public function sfntDocument(): SfntDocument
+    {
+        if (null !== $this->variationCoordinates) {
+            throw new UnsupportedFontException('Writing a selected variable-font instance is not supported yet.');
+        }
+
+        return $this->font->document();
+    }
+
+    public function subset(SubsetOptions $options): SubsetResult
+    {
+        if (null !== $this->variationCoordinates) {
+            throw new UnsupportedFontException('Subsetting a selected variable-font view is not supported.');
+        }
+
+        $originalGlyphCount = $this->face()->glyphCount;
+        $subset = $this->font->subset($options);
+        $data = $subset->document->toSfnt();
+        $font = new self(SfntFont::parse($data, $this->face()->path . '#subset'));
+
+        return new SubsetResult(
+            $font,
+            $options->unicodes,
+            $subset->mappedCodepointCount,
+            $originalGlyphCount,
+            $subset->retainedGlyphCount,
+            \strlen($data),
+            $subset->warnings,
+        );
     }
 }

@@ -14,6 +14,8 @@ declare(strict_types=1);
 namespace Alto\Font\Glyph;
 
 /**
+ * Represents one immutable glyph contour.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class Contour

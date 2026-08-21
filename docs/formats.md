@@ -1,15 +1,15 @@
 # Font formats
 
-`Font::fromFile()` detects the container from its contents. The filename
-extension is used when reporting `FontMetadata::$format`, but it does not make
-an unsupported font readable.
+`Font::fromFile()` detects the container from its signature. The reported
+format therefore remains correct when a file has no extension or a misleading
+extension.
 
 | Format | Support | Requirement or boundary |
 | --- | --- | --- |
 | TrueType with `glyf` outlines | Supported | Includes compound glyphs |
 | OpenType with `glyf` outlines | Supported | CFF and CFF2 outlines are rejected |
 | WOFF 1 | Supported | Requires the Zlib extension |
-| WOFF2 | Supported | Requires `ext-brotli` or the `brotli` executable |
+| WOFF2 | Supported | Reading requires `ext-brotli` or the `brotli` executable; writing requires an explicit compressor |
 | TTC and OTC collections | Supported | Select a face with `faceIndex` |
 | WOFF2 collections | Not supported | Rejected explicitly |
 | Variable `glyf` fonts | Supported | Includes `fvar`, `avar`, `gvar`, and `HVAR` |
@@ -32,7 +32,7 @@ An index outside the collection raises `InvalidFontException`.
 
 ## WOFF2 decompression
 
-WOFF2 uses Brotli compression. Alto Font first uses the PHP Brotli extension
+WOFF2 uses Brotli compression. ALTO Font first uses the PHP Brotli extension
 when it is available, then falls back to the `brotli` command-line program.
 If neither is available, loading a WOFF2 file fails rather than silently
 returning incomplete data.

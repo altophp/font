@@ -21,6 +21,26 @@ use PHPUnit\Framework\TestCase;
 #[CoversClass(FontFormat::class)]
 final class FontFormatTest extends TestCase
 {
+    #[DataProvider('signatures')]
+    public function testItDetectsFormatFromSignature(string $signature, FontFormat $expected): void
+    {
+        self::assertSame($expected, FontFormat::fromSignature($signature));
+    }
+
+    /**
+     * @return iterable<string, array{string, FontFormat}>
+     */
+    public static function signatures(): iterable
+    {
+        yield 'TrueType' => ["\x00\x01\x00\x00", FontFormat::TrueType];
+        yield 'Apple TrueType' => ['true', FontFormat::TrueType];
+        yield 'OpenType' => ['OTTO', FontFormat::OpenType];
+        yield 'WOFF' => ['wOFF', FontFormat::Woff];
+        yield 'WOFF2' => ['wOF2', FontFormat::Woff2];
+        yield 'collection' => ['ttcf', FontFormat::TrueTypeCollection];
+        yield 'unknown' => ['nope', FontFormat::Unknown];
+    }
+
     #[DataProvider('paths')]
     public function testItInfersFormatFromPath(string $path, FontFormat $expected): void
     {

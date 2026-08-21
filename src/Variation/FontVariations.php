@@ -16,6 +16,8 @@ namespace Alto\Font\Variation;
 use Alto\Font\Exception\InvalidFontException;
 
 /**
+ * Exposes the axes and named instances of a variable font.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class FontVariations

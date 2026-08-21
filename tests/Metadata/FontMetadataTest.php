@@ -24,21 +24,30 @@ final class FontMetadataTest extends TestCase
 {
     public function testItBuildsMetadataFromFace(): void
     {
-        $metadata = FontMetadata::fromFace(new FontFace('/tmp/font.woff2', 1000, 800, -200, 1, [], [
-            0 => 'Copyright',
-            1 => 'Family',
-            2 => 'Black Italic',
-            4 => 'Full Name',
-            5 => 'Version 1.0',
-            6 => 'PostScriptName',
-            8 => 'Manufacturer',
-            9 => 'Designer',
-            10 => 'Description',
-            11 => 'https://vendor.example',
-            12 => 'https://designer.example',
-            13 => 'License',
-            14 => 'https://license.example',
-        ]));
+        $metadata = FontMetadata::fromFace(new FontFace(
+            '/tmp/font.woff2',
+            1000,
+            800,
+            -200,
+            1,
+            [],
+            [
+                0 => 'Copyright',
+                1 => 'Family',
+                2 => 'Black Italic',
+                4 => 'Full Name',
+                5 => 'Version 1.0',
+                6 => 'PostScriptName',
+                8 => 'Manufacturer',
+                9 => 'Designer',
+                10 => 'Description',
+                11 => 'https://vendor.example',
+                12 => 'https://designer.example',
+                13 => 'License',
+                14 => 'https://license.example',
+            ],
+            format: FontFormat::Woff2,
+        ));
 
         self::assertSame('Family', $metadata->family);
         self::assertSame('Black Italic', $metadata->subfamily);
@@ -54,5 +63,19 @@ final class FontMetadataTest extends TestCase
         self::assertSame('https://vendor.example', $metadata->vendorUrl);
         self::assertSame('Description', $metadata->description);
         self::assertSame('Version 1.0', $metadata->version);
+    }
+
+    public function testItUsesTheDetectedFaceFormatInsteadOfThePathExtension(): void
+    {
+        $face = new FontFace('/tmp/misleading.woff2', 1000, 800, -200, 1, [], format: FontFormat::TrueType);
+
+        self::assertSame(FontFormat::TrueType, FontMetadata::fromFace($face)->format);
+    }
+
+    public function testItKeepsInferringTheFormatForHistoricallyConstructedFaces(): void
+    {
+        $face = new FontFace('/tmp/font.ttf', 1000, 800, -200, 1, []);
+
+        self::assertSame(FontFormat::TrueType, FontMetadata::fromFace($face)->format);
     }
 }

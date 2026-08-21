@@ -18,6 +18,8 @@ use Alto\Font\Descriptor\FontStyle;
 use Alto\Font\Descriptor\FontWeight;
 
 /**
+ * Defines immutable font discovery criteria.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class FontQuery

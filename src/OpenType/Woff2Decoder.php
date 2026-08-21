@@ -18,25 +18,22 @@ use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\Exception\UnsupportedFontException;
 
 /**
+ * Decodes WOFF2 data into standalone SFNT data.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @internal
  */
-/**
- * @author Simon André <smn.andre@gmail.com>
- */
-final class Woff2Decoder
+final readonly class Woff2Decoder
 {
-    private const array KNOWN_TAGS = [
-        'cmap', 'head', 'hhea', 'hmtx', 'maxp', 'name', 'OS/2', 'post',
-        'cvt ', 'fpgm', 'glyf', 'loca', 'prep', 'CFF ', 'VORG', 'EBDT',
-        'EBLC', 'gasp', 'hdmx', 'kern', 'LTSH', 'PCLT', 'VDMX', 'vhea',
-        'vmtx', 'BASE', 'GDEF', 'GPOS', 'GSUB', 'EBSC', 'JSTF', 'MATH',
-        'CBDT', 'CBLC', 'COLR', 'CPAL', 'SVG ', 'sbix', 'acnt', 'avar',
-        'bdat', 'bloc', 'bsln', 'cvar', 'fdsc', 'feat', 'fmtx', 'fvar',
-        'gvar', 'hsty', 'just', 'lcar', 'mort', 'morx', 'opbd', 'prop',
-        'trak', 'Zapf', 'Silf', 'Glat', 'Gloc', 'Feat', 'Sill',
-    ];
-
     private const int ARG_1_AND_2_ARE_WORDS = 0x0001;
+    private const int ON_CURVE_POINT = 0x01;
+    private const int X_SHORT_VECTOR = 0x02;
+    private const int Y_SHORT_VECTOR = 0x04;
+    private const int REPEAT_FLAG = 0x08;
+    private const int X_IS_SAME_OR_POSITIVE_X_SHORT_VECTOR = 0x10;
+    private const int Y_IS_SAME_OR_POSITIVE_Y_SHORT_VECTOR = 0x20;
+    private const int OVERLAP_SIMPLE = 0x40;
     private const int MORE_COMPONENTS = 0x0020;
     private const int WE_HAVE_A_SCALE = 0x0008;
     private const int WE_HAVE_AN_X_AND_Y_SCALE = 0x0040;
@@ -64,6 +61,10 @@ final class Woff2Decoder
             throw new InvalidFontException('WOFF2 declares no font tables.');
         }
 
+        if (0 !== $woff2->uint16(14)) {
+            throw new InvalidFontException('WOFF2 reserved header field must be zero.');
+        }
+
         $cursor = 48;
         $entries = [];
         $tags = [];
@@ -77,7 +78,7 @@ final class Woff2Decoder
                 $tag = $woff2->string($cursor, 4);
                 $cursor += 4;
             } else {
-                $tag = self::KNOWN_TAGS[$tagIndex];
+                $tag = Woff2KnownTags::at($tagIndex);
             }
 
             if (isset($tags[$tag])) {
@@ -116,6 +117,7 @@ final class Woff2Decoder
             throw new InvalidFontException('WOFF2 declares an implausible total decompressed table size.');
         }
 
+        self::validateBlockLayout($woff2, $cursor, $totalCompressedSize);
         $compressedData = $woff2->string($cursor, $totalCompressedSize);
         $tableBlock = self::brotliDecompress($compressedData);
 
@@ -155,7 +157,7 @@ final class Woff2Decoder
             }
         }
 
-        return self::buildSfnt($flavor, $tables);
+        return SfntBuilder::build($flavor, $tables);
     }
 
     /**
@@ -372,7 +374,7 @@ final class Woff2Decoder
             }
 
             $xMins[] = $bounds[0];
-            $glyf .= self::pad2($glyph);
+            $glyf .= self::pad4($glyph);
         }
 
         $offsets[] = \strlen($glyf);
@@ -468,31 +470,73 @@ final class Woff2Decoder
 
         $glyph .= self::uint16(\strlen($instructions)) . $instructions;
 
+        $flags = [];
+        $xData = $yData = '';
+        $previousX = $previousY = 0;
+
         foreach ($onCurve as $index => $isOnCurve) {
-            $flag = $isOnCurve ? 0x01 : 0x00;
+            $flag = $isOnCurve ? self::ON_CURVE_POINT : 0;
 
             if (0 === $index && $overlap) {
-                $flag |= 0x40;
+                $flag |= self::OVERLAP_SIMPLE;
             }
 
-            $glyph .= \chr($flag);
+            $xDelta = $xCoordinates[$index] - $previousX;
+            $yDelta = $yCoordinates[$index] - $previousY;
+            $previousX = $xCoordinates[$index];
+            $previousY = $yCoordinates[$index];
+
+            if (0 === $xDelta) {
+                $flag |= self::X_IS_SAME_OR_POSITIVE_X_SHORT_VECTOR;
+            } elseif (abs($xDelta) <= 0xFF) {
+                $flag |= self::X_SHORT_VECTOR;
+                $flag |= $xDelta > 0 ? self::X_IS_SAME_OR_POSITIVE_X_SHORT_VECTOR : 0;
+                $xData .= \chr(abs($xDelta));
+            } else {
+                $xData .= self::int16($xDelta);
+            }
+
+            if (0 === $yDelta) {
+                $flag |= self::Y_IS_SAME_OR_POSITIVE_Y_SHORT_VECTOR;
+            } elseif (abs($yDelta) <= 0xFF) {
+                $flag |= self::Y_SHORT_VECTOR;
+                $flag |= $yDelta > 0 ? self::Y_IS_SAME_OR_POSITIVE_Y_SHORT_VECTOR : 0;
+                $yData .= \chr(abs($yDelta));
+            } else {
+                $yData .= self::int16($yDelta);
+            }
+
+            $flags[] = $flag;
         }
 
-        $previous = 0;
+        return $glyph . self::encodeFlags($flags) . $xData . $yData;
+    }
 
-        foreach ($xCoordinates as $coordinate) {
-            $glyph .= self::int16($coordinate - $previous);
-            $previous = $coordinate;
+    /**
+     * @param list<int> $flags
+     */
+    private static function encodeFlags(array $flags): string
+    {
+        $data = '';
+
+        for ($index = 0, $count = \count($flags); $index < $count;) {
+            $flag = $flags[$index];
+            $runLength = 1;
+
+            while ($index + $runLength < $count && $flags[$index + $runLength] === $flag && $runLength < 256) {
+                ++$runLength;
+            }
+
+            if ($runLength > 1) {
+                $data .= self::uint8($flag | self::REPEAT_FLAG) . self::uint8($runLength - 1);
+            } else {
+                $data .= self::uint8($flag);
+            }
+
+            $index += $runLength;
         }
 
-        $previous = 0;
-
-        foreach ($yCoordinates as $coordinate) {
-            $glyph .= self::int16($coordinate - $previous);
-            $previous = $coordinate;
-        }
-
-        return $glyph;
+        return $data;
     }
 
     /**
@@ -658,77 +702,6 @@ final class Woff2Decoder
         return $xMins;
     }
 
-    /**
-     * @param array<string, string> $tables
-     */
-    private static function buildSfnt(string $flavor, array $tables): string
-    {
-        if (isset($tables['head'])) {
-            if (\strlen($tables['head']) < 12) {
-                throw new InvalidFontException('WOFF2 head table is truncated.');
-            }
-
-            $tables['head'] = substr_replace($tables['head'], "\0\0\0\0", 8, 4);
-        }
-
-        ksort($tables);
-        $numTables = \count($tables);
-        $maxPowerOfTwo = 1;
-        $entrySelector = 0;
-
-        while ($maxPowerOfTwo * 2 <= $numTables) {
-            $maxPowerOfTwo *= 2;
-            ++$entrySelector;
-        }
-
-        $searchRange = $maxPowerOfTwo * 16;
-        $rangeShift = $numTables * 16 - $searchRange;
-        $sfntOffset = 12 + $numTables * 16;
-        $records = '';
-        $tableData = '';
-        $headOffset = null;
-
-        foreach ($tables as $tag => $table) {
-            if ('head' === $tag) {
-                $headOffset = $sfntOffset;
-            }
-
-            $records .= $tag . self::uint32(self::checksum($table)) . self::uint32($sfntOffset) . self::uint32(\strlen($table));
-            $padded = self::pad4($table);
-            $tableData .= $padded;
-            $sfntOffset += \strlen($padded);
-        }
-
-        $sfnt = $flavor . self::uint16($numTables) . self::uint16($searchRange) . self::uint16($entrySelector) . self::uint16($rangeShift) . $records . $tableData;
-
-        if (null !== $headOffset) {
-            $adjustment = (0xB1B0AFBA - self::checksum($sfnt)) & 0xFFFFFFFF;
-            $sfnt = substr_replace($sfnt, self::uint32($adjustment), $headOffset + 8, 4);
-        }
-
-        return $sfnt;
-    }
-
-    private static function checksum(string $data): int
-    {
-        $data = self::pad4($data);
-        $sum = 0;
-
-        for ($offset = 0, $length = \strlen($data); $offset < $length; $offset += 4) {
-            $word = unpack('Nvalue', substr($data, $offset, 4));
-
-            $value = false === $word ? null : $word['value'] ?? null;
-
-            if (!\is_int($value)) {
-                throw new InvalidFontException('Could not calculate reconstructed font checksum.');
-            }
-
-            $sum = ($sum + $value) & 0xFFFFFFFF;
-        }
-
-        return $sum;
-    }
-
     private static function read255UInt16(BinaryReader $reader, int &$cursor): int
     {
         $code = $reader->uint8($cursor++);
@@ -788,44 +761,155 @@ final class Woff2Decoder
             }
         }
 
-        $process = proc_open(
-            ['brotli', '--decompress', '--stdout'],
-            [
-                0 => ['pipe', 'r'],
-                1 => ['pipe', 'w'],
-                2 => ['pipe', 'w'],
-            ],
-            $pipes,
-        );
+        $input = tmpfile();
 
-        if (!\is_resource($process)) {
-            throw new UnsupportedFontException('WOFF2 Brotli decompression requires ext-brotli or the brotli binary.');
+        if (false === $input) {
+            throw new UnsupportedFontException('WOFF2 Brotli decompression could not create temporary streams.');
         }
 
-        $pipeResources = (array) $pipes;
+        $output = tmpfile();
 
-        if (!isset($pipeResources[0], $pipeResources[1], $pipeResources[2])
-            || !\is_resource($pipeResources[0])
-            || !\is_resource($pipeResources[1])
-            || !\is_resource($pipeResources[2])) {
-            proc_close($process);
+        if (false === $output) {
+            fclose($input);
 
-            throw new InvalidFontException('WOFF2 Brotli decompression failed to open process pipes.');
+            throw new UnsupportedFontException('WOFF2 Brotli decompression could not create temporary streams.');
         }
 
-        fwrite($pipeResources[0], $compressedData);
-        fclose($pipeResources[0]);
-        $decompressed = stream_get_contents($pipeResources[1]);
-        $error = stream_get_contents($pipeResources[2]);
-        fclose($pipeResources[1]);
-        fclose($pipeResources[2]);
-        $exitCode = proc_close($process);
+        $errors = tmpfile();
 
-        if (0 !== $exitCode || !\is_string($decompressed)) {
-            throw new InvalidFontException('WOFF2 Brotli decompression failed.' . ('' === $error ? '' : ' ' . $error));
+        if (false === $errors) {
+            fclose($input);
+            fclose($output);
+
+            throw new UnsupportedFontException('WOFF2 Brotli decompression could not create temporary streams.');
         }
 
-        return $decompressed;
+        try {
+            self::writeAll($input, $compressedData);
+
+            if (!rewind($input)) {
+                throw new InvalidFontException('WOFF2 Brotli input could not be prepared.');
+            }
+
+            $process = @proc_open(
+                ['brotli', '--decompress', '--stdout'],
+                [$input, $output, $errors],
+                $pipes,
+            );
+
+            if (!\is_resource($process)) {
+                throw new UnsupportedFontException('WOFF2 Brotli decompression requires ext-brotli or the brotli binary.');
+            }
+
+            $exitCode = proc_close($process);
+            rewind($output);
+            rewind($errors);
+            $decompressed = stream_get_contents($output);
+            $error = stream_get_contents($errors);
+
+            if (0 !== $exitCode || !\is_string($decompressed)) {
+                $detail = \is_string($error) ? trim($error) : '';
+
+                throw new InvalidFontException('WOFF2 Brotli decompression failed.' . ('' === $detail ? '' : ' ' . $detail));
+            }
+
+            return $decompressed;
+        } finally {
+            fclose($input);
+            fclose($output);
+            fclose($errors);
+        }
+    }
+
+    private static function validateBlockLayout(BinaryReader $woff2, int $compressedOffset, int $compressedLength): void
+    {
+        $compressedEnd = $compressedOffset + $compressedLength;
+        $fontDataEnd = self::round4($compressedEnd);
+
+        if ($compressedEnd < $compressedOffset || $fontDataEnd > $woff2->length()) {
+            throw new InvalidFontException('WOFF2 compressed font data exceeds the file bounds.');
+        }
+
+        self::assertZeroPadding($woff2, $compressedEnd, $fontDataEnd);
+
+        $metaOffset = $woff2->uint32(28);
+        $metaLength = $woff2->uint32(32);
+        $metaOriginalLength = $woff2->uint32(36);
+        $privateOffset = $woff2->uint32(40);
+        $privateLength = $woff2->uint32(44);
+        $nextOffset = $fontDataEnd;
+
+        if (0 === $metaOffset) {
+            if (0 !== $metaLength || 0 !== $metaOriginalLength) {
+                throw new InvalidFontException('WOFF2 metadata lengths require a metadata offset.');
+            }
+        } else {
+            if (0 === $metaLength || 0 === $metaOriginalLength || $metaOffset !== $nextOffset) {
+                throw new InvalidFontException('WOFF2 metadata block has an invalid offset or length.');
+            }
+
+            $metaEnd = $metaOffset + $metaLength;
+
+            if ($metaEnd < $metaOffset || $metaEnd > $woff2->length()) {
+                throw new InvalidFontException('WOFF2 metadata block exceeds the file bounds.');
+            }
+
+            $nextOffset = self::round4($metaEnd);
+            self::assertZeroPadding($woff2, $metaEnd, $nextOffset);
+        }
+
+        if (0 === $privateOffset) {
+            if (0 !== $privateLength) {
+                throw new InvalidFontException('WOFF2 private-data length requires a private-data offset.');
+            }
+
+            $expectedLength = 0 === $metaOffset ? $fontDataEnd : $metaOffset + $metaLength;
+
+            if ($woff2->length() !== $expectedLength) {
+                throw new InvalidFontException('WOFF2 contains unexpected trailing data.');
+            }
+
+            return;
+        }
+
+        if (0 === $privateLength || $privateOffset !== $nextOffset || $privateOffset + $privateLength !== $woff2->length()) {
+            throw new InvalidFontException('WOFF2 private-data block has an invalid offset or length.');
+        }
+    }
+
+    private static function assertZeroPadding(BinaryReader $reader, int $start, int $end): void
+    {
+        if ($end > $reader->length()) {
+            throw new InvalidFontException('WOFF2 padding exceeds the file bounds.');
+        }
+
+        if ($end > $start && str_repeat("\0", $end - $start) !== $reader->string($start, $end - $start)) {
+            throw new InvalidFontException('WOFF2 block padding must contain only NULL bytes.');
+        }
+    }
+
+    private static function round4(int $value): int
+    {
+        return ($value + 3) & ~3;
+    }
+
+    /**
+     * @param resource $stream
+     */
+    private static function writeAll($stream, string $data): void
+    {
+        $offset = 0;
+        $length = \strlen($data);
+
+        while ($offset < $length) {
+            $written = fwrite($stream, substr($data, $offset, min(1048576, $length - $offset)));
+
+            if (false === $written || 0 === $written) {
+                throw new InvalidFontException('WOFF2 Brotli input could not be prepared.');
+            }
+
+            $offset += $written;
+        }
     }
 
     /**
@@ -891,19 +975,23 @@ final class Woff2Decoder
         return pack('n', $value);
     }
 
+    private static function uint8(int $value): string
+    {
+        if ($value < 0 || $value > 0xFF) {
+            throw new InvalidFontException('Font value is outside the unsigned 8-bit range.');
+        }
+
+        return \chr($value);
+    }
+
     private static function uint32(int $value): string
     {
         return pack('N', $value & 0xFFFFFFFF);
     }
 
-    private static function pad2(string $data): string
-    {
-        return $data . (0 === \strlen($data) % 2 ? '' : "\0");
-    }
-
     private static function pad4(string $data): string
     {
-        return $data . str_repeat("\0", (4 - \strlen($data) % 4) % 4);
+        return str_pad($data, self::round4(\strlen($data)), "\0");
     }
 
     private static function assertConsumed(int $cursor, BinaryReader $reader, string $stream): void

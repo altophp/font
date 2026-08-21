@@ -20,12 +20,13 @@ use Alto\Font\Variation\VariationAxis;
 use Alto\Font\Variation\VariationInstance;
 
 /**
+ * Parses axes and named instances from an fvar table.
+ *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @internal
  */
-/**
- * @author Simon André <smn.andre@gmail.com>
- */
-final class FvarTable
+final readonly class FvarTable
 {
     /**
      * @param array<int, string> $names

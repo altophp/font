@@ -16,9 +16,11 @@ namespace Alto\Font\OpenType\Table;
 use Alto\Font\Binary\BinaryReader;
 
 /**
+ * Parses names from an OpenType name table.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
-final class NameTable
+final readonly class NameTable
 {
     /**
      * @return array<int, string>

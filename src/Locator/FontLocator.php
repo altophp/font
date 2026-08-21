@@ -14,11 +14,11 @@ declare(strict_types=1);
 namespace Alto\Font\Locator;
 
 /**
- * Recursively lists font files (.ttf/.otf/.woff/.woff2/.ttc/.otc) under a set
- * of directories - explicit ones, the OS-standard system font directories, or
- * both combined. Skips unreadable subdirectories rather than failing.
- */
-/**
+ * Recursively lists supported font files from configured directories.
+ *
+ * Application and system locations can be combined. Unreadable directories
+ * are skipped so discovery can continue through the remaining locations.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class FontLocator implements FontLocatorInterface

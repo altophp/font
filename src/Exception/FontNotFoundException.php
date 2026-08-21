@@ -14,6 +14,8 @@ declare(strict_types=1);
 namespace Alto\Font\Exception;
 
 /**
+ * Reports that no font matches a discovery query.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final class FontNotFoundException extends \RuntimeException implements FontExceptionInterface {}

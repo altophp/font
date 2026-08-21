@@ -13,15 +13,14 @@ declare(strict_types=1);
 
 namespace Alto\Font\Tests\OpenType;
 
-use Alto\Font\Binary\BinaryReader;
 use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\Exception\UnsupportedFontException;
-use Alto\Font\Glyph\Contour;
 use Alto\Font\Glyph\GlyphId;
-use Alto\Font\Glyph\GlyphPoint;
-use Alto\Font\Glyph\PathCommand;
+use Alto\Font\Metadata\FontFormat;
+use Alto\Font\OpenType\SfntBuilder;
 use Alto\Font\OpenType\SfntFont;
-use Alto\Font\OpenType\Woff2Decoder;
+use Alto\Font\Subset\SubsetOptions;
+use Alto\Font\Subset\UnicodeSet;
 use Alto\Font\Tests\Fixtures\ContourAssertions;
 use Alto\Font\Tests\Fixtures\TinyTrueTypeFont;
 use Alto\Font\Variation\VariationCoordinates;
@@ -29,6 +28,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 
 #[CoversClass(SfntFont::class)]
+#[CoversClass(SfntBuilder::class)]
 final class SfntFontTest extends TestCase
 {
     use ContourAssertions;
@@ -45,17 +45,35 @@ final class SfntFontTest extends TestCase
         self::assertSame(-200, $face->descender);
         self::assertSame(5, $face->glyphCount);
         self::assertSame('Atelier Tiny', $face->name(1));
+        self::assertSame(FontFormat::TrueType, $face->format);
         self::assertSame(1, $glyphId->value);
         self::assertSame(600, $font->glyphMetrics($glyphId)->advanceWidth);
         self::assertSame('M 100 0 L 300 700 L 500 0 L 100 0 Z', self::describeContour($font->glyphOutline($glyphId)->contours[0]));
+    }
+
+    public function testItDetectsAnInMemoryTrueTypeContainerInsteadOfUsingItsLabel(): void
+    {
+        $data = file_get_contents(self::fontPath());
+        self::assertIsString($data);
+
+        $face = SfntFont::parse($data, 'misleading.woff2')->face();
+
+        self::assertSame('misleading.woff2', $face->path);
+        self::assertSame(FontFormat::TrueType, $face->format);
     }
 
     public function testItParsesWoffContainers(): void
     {
         $path = sys_get_temp_dir() . '/atelier-font-truetype-woff-' . bin2hex(random_bytes(4)) . '.woff';
         TinyTrueTypeFont::writeWoff($path);
+        $data = file_get_contents($path);
+        self::assertIsString($data);
 
-        self::assertSame('Atelier Tiny', SfntFont::open($path)->face()->name(1));
+        $face = SfntFont::parse($data)->face();
+
+        self::assertSame('Atelier Tiny', $face->name(1));
+        self::assertSame('<memory>', $face->path);
+        self::assertSame(FontFormat::Woff, $face->format);
     }
 
     public function testItParsesNullTransformWoff2Containers(): void
@@ -66,8 +84,14 @@ final class SfntFontTest extends TestCase
 
         $path = sys_get_temp_dir() . '/atelier-font-truetype-woff2-' . bin2hex(random_bytes(4)) . '.woff2';
         TinyTrueTypeFont::writeWoff2($path);
+        $data = file_get_contents($path);
+        self::assertIsString($data);
 
-        self::assertSame('Atelier Tiny', SfntFont::open($path)->face()->name(1));
+        $face = SfntFont::parse($data)->face();
+
+        self::assertSame('Atelier Tiny', $face->name(1));
+        self::assertSame('<memory>', $face->path);
+        self::assertSame(FontFormat::Woff2, $face->format);
     }
 
     public function testItRejectsMissingFiles(): void
@@ -101,12 +125,16 @@ final class SfntFontTest extends TestCase
     {
         $path = sys_get_temp_dir() . '/atelier-font-ttc-' . bin2hex(random_bytes(4)) . '.ttc';
         TinyTrueTypeFont::writeCollection($path, [1000, 2048]);
+        $data = file_get_contents($path);
+        self::assertIsString($data);
 
-        $font = SfntFont::open($path);
+        $font = SfntFont::parse($data);
 
         self::assertSame(1000, $font->face()->unitsPerEm);
+        self::assertSame('<memory>', $font->face()->path);
         self::assertSame(0, $font->face()->faceIndex);
         self::assertSame(2, $font->face()->faceCount);
+        self::assertSame(FontFormat::TrueTypeCollection, $font->face()->format);
     }
 
     public function testItReadsARequestedFaceOfACollection(): void
@@ -119,6 +147,42 @@ final class SfntFontTest extends TestCase
         self::assertSame(2048, $font->face()->unitsPerEm);
         self::assertSame(1, $font->face()->faceIndex);
         self::assertSame(2, $font->face()->faceCount);
+    }
+
+    public function testItExtractsACollectionFaceAsAStandaloneSfnt(): void
+    {
+        $path = sys_get_temp_dir() . '/alto-font-ttc-' . bin2hex(random_bytes(4)) . '.ttc';
+        TinyTrueTypeFont::writeCollection($path, [1000, 2048]);
+
+        $font = SfntFont::parse(SfntFont::open($path, faceIndex: 1)->toSfnt());
+
+        self::assertSame(2048, $font->face()->unitsPerEm);
+        self::assertSame(0, $font->face()->faceIndex);
+        self::assertSame(1, $font->face()->faceCount);
+    }
+
+    public function testItConvertsWoffToReloadableSfnt(): void
+    {
+        $path = sys_get_temp_dir() . '/alto-font-woff-' . bin2hex(random_bytes(4)) . '.woff';
+        TinyTrueTypeFont::writeWoff($path);
+
+        $font = SfntFont::parse(SfntFont::open($path)->toSfnt());
+
+        self::assertSame('Atelier Tiny', $font->face()->name(1));
+    }
+
+    public function testItConvertsWoff2ToReloadableSfnt(): void
+    {
+        if (!TinyTrueTypeFont::hasBrotliEncoder()) {
+            self::markTestSkipped('The brotli binary is required to generate the WOFF2 fixture.');
+        }
+
+        $path = sys_get_temp_dir() . '/alto-font-woff2-' . bin2hex(random_bytes(4)) . '.woff2';
+        TinyTrueTypeFont::writeWoff2($path);
+
+        $font = SfntFont::parse(SfntFont::open($path)->toSfnt());
+
+        self::assertSame('Atelier Tiny', $font->face()->name(1));
     }
 
     public function testItRejectsCollectionsWhereAFacePointsToAnotherCollection(): void
@@ -233,7 +297,7 @@ final class SfntFontTest extends TestCase
     public function testItRejectsWoffContainersWithInvalidLengths(): void
     {
         $this->expectException(InvalidFontException::class);
-        $this->expectExceptionMessage('WOFF declared length exceeds file length.');
+        $this->expectExceptionMessage('WOFF declared length does not match file length.');
 
         SfntFont::parse('wOFF' . "\x00\x01\x00\x00" . self::u32(100) . self::u16(0) . self::u16(0));
     }
@@ -252,9 +316,60 @@ final class SfntFontTest extends TestCase
         self::assertIsString($payload);
 
         $this->expectException(InvalidFontException::class);
-        $this->expectExceptionMessage('WOFF table "test" decompressed to an unexpected length.');
+        $this->expectExceptionMessage('WOFF table "test" has a compressed length greater than its original length.');
 
         SfntFont::parse(self::woffWithTable('test', $payload, 4));
+    }
+
+    public function testItRejectsWoffTablesThatDecompressToTheWrongLength(): void
+    {
+        $payload = gzcompress('abc');
+        self::assertIsString($payload);
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('decompressed to an unexpected length');
+
+        SfntFont::parse(self::woffWithTable('test', $payload, 20));
+    }
+
+    public function testItRejectsUnsortedWoffTableDirectories(): void
+    {
+        $woff = self::tinyWoffData();
+        $firstTag = substr($woff, 44, 4);
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('unique tags in ascending order');
+
+        SfntFont::parse(substr_replace($woff, $firstTag, 64, 4));
+    }
+
+    public function testItRejectsMisalignedWoffTableRanges(): void
+    {
+        $woff = self::tinyWoffData();
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('invalid data range');
+
+        SfntFont::parse(substr_replace($woff, self::u32(65), 48, 4));
+    }
+
+    public function testItRejectsOverlappingWoffTableRanges(): void
+    {
+        $woff = self::tinyWoffData();
+        $firstOffset = substr($woff, 48, 4);
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('data ranges overlap');
+
+        SfntFont::parse(substr_replace($woff, $firstOffset, 68, 4));
+    }
+
+    public function testItRejectsATruncatedWoffHeadTable(): void
+    {
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('head table is truncated');
+
+        SfntFont::parse(self::woffWithTable('head', str_repeat("\0", 8), 8));
     }
 
     public function testItRejectsWoffTablesDeclaringAnImplausibleDecompressedSize(): void
@@ -263,9 +378,53 @@ final class SfntFontTest extends TestCase
         self::assertIsString($payload);
 
         $this->expectException(InvalidFontException::class);
-        $this->expectExceptionMessage('WOFF table "test" declares an implausible decompressed size.');
+        $this->expectExceptionMessage('WOFF declares an implausible total decompressed table size.');
 
         SfntFont::parse(self::woffWithTable('test', $payload, 200 * 1024 * 1024));
+    }
+
+    public function testItRejectsWoffContainersWithTrailingData(): void
+    {
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('WOFF declared length does not match file length.');
+
+        SfntFont::parse(self::woffWithTable('test', 'data', 4) . "\0");
+    }
+
+    public function testItRejectsWoffContainersWithoutTables(): void
+    {
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('WOFF declares no font tables.');
+
+        SfntFont::parse('wOFF' . "\x00\x01\x00\x00" . self::u32(44) . self::u16(0) . str_repeat("\0", 30));
+    }
+
+    public function testItRejectsWoffTotalSfntSizeMismatches(): void
+    {
+        $woff = self::woffWithTable('test', 'data', 4);
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('WOFF totalSfntSize does not match');
+
+        SfntFont::parse(substr_replace($woff, self::u32(1), 16, 4));
+    }
+
+    public function testItRejectsWoffTableChecksumMismatches(): void
+    {
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('WOFF table "test" checksum does not match its declared checksum.');
+
+        SfntFont::parse(self::woffWithTable('test', 'data', 4, 1));
+    }
+
+    public function testWoffHeadChecksumIgnoresCheckSumAdjustment(): void
+    {
+        $head = substr_replace(str_repeat("\0", 54), self::u32(0x12345678), 8, 4);
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('Required table "cmap" is missing.');
+
+        SfntFont::parse(self::woffWithTable('head', $head, \strlen($head)));
     }
 
     public function testItRejectsWoff2CollectionsAndInvalidLengths(): void
@@ -334,6 +493,16 @@ final class SfntFontTest extends TestCase
         $this->expectExceptionMessage('Compound glyph cycle detected');
 
         $font->glyphOutline(new GlyphId(4));
+    }
+
+    public function testItExposesItsDocumentAndSubsetsDirectly(): void
+    {
+        $font = SfntFont::open(self::fontPath());
+        $subset = $font->subset(new SubsetOptions(UnicodeSet::fromText('A')));
+
+        self::assertSame($font->toSfnt(), $font->document()->toSfnt());
+        self::assertSame(1, $subset->mappedCodepointCount);
+        self::assertGreaterThanOrEqual(2, $subset->retainedGlyphCount);
     }
 
     public function testItRejectsPointMatchedCompoundGlyphs(): void
@@ -533,75 +702,6 @@ final class SfntFontTest extends TestCase
         self::assertSame(10, $metrics->leftSideBearing);
     }
 
-    public function testItReadsUIntBase128ValuesAndRejectsInvalidEncodings(): void
-    {
-        self::assertSame(128, self::readUIntBase128("\x81\x00"));
-
-        foreach ([
-            "\x80\x00" => 'leading zeros',
-            "\x90\x80\x80\x80\x00" => 'exceeds 32 bits',
-            "\x81\x81\x81\x81\x81" => 'sequence exceeds 5 bytes',
-        ] as $bytes => $message) {
-            try {
-                self::readUIntBase128($bytes);
-                self::fail('Expected invalid UIntBase128 encoding to be rejected.');
-            } catch (InvalidFontException $exception) {
-                self::assertStringContainsString($message, $exception->getMessage());
-            }
-        }
-    }
-
-    public function testItInfersContourDeltasForSparseVariationPoints(): void
-    {
-        self::assertSame(
-            [5.0, 5.0, 5.0, 5.0],
-            self::invokePrivateStatic('inferContourDeltas', [
-                [0.0, 5.0, 0.0, 0.0],
-                [1],
-                [3],
-                [0, 10, 20, 30],
-            ]),
-        );
-
-        self::assertSame(
-            [10.0, 10.0, 20.0, 30.0],
-            self::invokePrivateStatic('inferContourDeltas', [
-                [0.0, 10.0, 0.0, 30.0],
-                [1, 3],
-                [3],
-                [0, 10, 20, 30],
-            ]),
-        );
-        self::assertSame([0], self::invokePrivateStatic('contourPointsBetween', [3, 1, 0, 3]));
-        self::assertSame(5.0, self::invokePrivateStatic('interpolateDelta', [10, 10, 10, 5.0, 7.0]));
-        self::assertSame(15.0, self::invokePrivateStatic('interpolateDelta', [15, 20, 10, 20.0, 10.0]));
-        self::assertSame(10.0, self::invokePrivateStatic('interpolateDelta', [0, 10, 20, 10.0, 20.0]));
-        self::assertSame(20.0, self::invokePrivateStatic('interpolateDelta', [30, 10, 20, 10.0, 20.0]));
-    }
-
-    public function testItBuildsPathCommandsForOnAndOffCurveContours(): void
-    {
-        self::assertSame('', self::pathData(self::commandsForContour([])));
-        self::assertSame('M 0 0 L 10 0 L 0 10 L 0 0 Z', self::pathData(self::commandsForContour([
-            new GlyphPoint(0.0, 0.0, true),
-            new GlyphPoint(10.0, 0.0, true),
-            new GlyphPoint(0.0, 10.0, true),
-        ])));
-        self::assertSame('M 0 0 Q 5 10 0 0 Z', self::pathData(self::commandsForContour([
-            new GlyphPoint(5.0, 10.0, false),
-            new GlyphPoint(0.0, 0.0, true),
-        ])));
-        self::assertSame('M 10 10 Q 0 0 5 0 Q 10 0 10 10 Z', self::pathData(self::commandsForContour([
-            new GlyphPoint(0.0, 0.0, false),
-            new GlyphPoint(10.0, 0.0, false),
-            new GlyphPoint(10.0, 10.0, true),
-        ])));
-        self::assertSame('M 5 0 Q 0 0 5 0 Q 10 0 5 0 Z', self::pathData(self::commandsForContour([
-            new GlyphPoint(0.0, 0.0, false),
-            new GlyphPoint(10.0, 0.0, false),
-        ])));
-    }
-
     private static function fontPath(
         string $filename = 'tiny.ttf',
         bool $compoundCycle = false,
@@ -611,51 +711,6 @@ final class SfntFontTest extends TestCase
         TinyTrueTypeFont::write($path, $compoundCycle, $unsupportedCff);
 
         return $path;
-    }
-
-    private static function readUIntBase128(string $bytes): int
-    {
-        $cursor = 0;
-        $method = new \ReflectionMethod(Woff2Decoder::class, 'readUIntBase128');
-        $arguments = [new BinaryReader($bytes, 'woff2'), &$cursor];
-        $result = $method->invokeArgs(null, $arguments);
-
-        self::assertIsInt($result);
-
-        return $result;
-    }
-
-    /**
-     * @param list<mixed> $arguments
-     */
-    private static function invokePrivateStatic(string $methodName, array $arguments): mixed
-    {
-        $method = new \ReflectionMethod(SfntFont::class, $methodName);
-
-        return $method->invokeArgs(null, $arguments);
-    }
-
-    /**
-     * @param list<GlyphPoint> $points
-     *
-     * @return list<PathCommand>
-     */
-    private static function commandsForContour(array $points): array
-    {
-        $result = self::invokePrivateStatic('commandsForContour', [$points]);
-
-        self::assertIsArray($result);
-        self::assertContainsOnlyInstancesOf(PathCommand::class, $result);
-
-        return array_values($result);
-    }
-
-    /**
-     * @param list<PathCommand> $commands
-     */
-    private static function pathData(array $commands): string
-    {
-        return self::describeContour(new Contour($commands));
     }
 
     /**
@@ -678,10 +733,22 @@ final class SfntFontTest extends TestCase
         return "\x00\x01\x00\x00" . self::u16(\count($tables)) . self::u16(0) . self::u16(0) . self::u16(0) . $records . $data;
     }
 
-    private static function woffWithTable(string $tag, string $payload, int $originalLength): string
+    private static function woffWithTable(string $tag, string $payload, int $originalLength, ?int $declaredChecksum = null): string
     {
         $offset = 64;
         $length = $offset + \strlen($payload);
+        $table = $payload;
+
+        if (\strlen($payload) !== $originalLength) {
+            $decompressed = @gzuncompress($payload, $originalLength);
+            $table = \is_string($decompressed) ? $decompressed : '';
+        }
+
+        if ('head' === $tag && \strlen($table) >= 12) {
+            $table = substr_replace($table, "\0\0\0\0", 8, 4);
+        }
+
+        $declaredChecksum ??= self::checksum($table);
 
         return 'wOFF'
             . "\x00\x01\x00\x00"
@@ -696,8 +763,42 @@ final class SfntFontTest extends TestCase
             . self::u32($offset)
             . self::u32(\strlen($payload))
             . self::u32($originalLength)
-            . self::u32(0)
+            . self::u32($declaredChecksum)
             . $payload;
+    }
+
+    private static function tinyWoffData(): string
+    {
+        $path = sys_get_temp_dir() . '/alto-font-corrupt-' . bin2hex(random_bytes(4)) . '.woff';
+        TinyTrueTypeFont::writeWoff($path);
+        $data = file_get_contents($path);
+        self::assertIsString($data);
+
+        return $data;
+    }
+
+    private static function checksum(string $data): int
+    {
+        $data = self::pad4($data);
+        $sum = 0;
+
+        for ($offset = 0, $length = \strlen($data); $offset < $length; $offset += 4) {
+            $word = unpack('Nvalue', substr($data, $offset, 4));
+
+            if (!\is_array($word)) {
+                self::fail('Could not calculate test WOFF checksum.');
+            }
+
+            $value = $word['value'] ?? null;
+
+            if (!\is_int($value)) {
+                self::fail('Could not calculate test WOFF checksum.');
+            }
+
+            $sum = ($sum + $value) & 0xFFFFFFFF;
+        }
+
+        return $sum;
     }
 
     private static function pad4(string $data): string

@@ -17,6 +17,8 @@ use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\OpenType\Table\TableRecord;
 
 /**
+ * Reads typed values from bounded binary font data.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class BinaryReader
@@ -26,6 +28,14 @@ final readonly class BinaryReader
     public function length(): int
     {
         return \strlen($this->data);
+    }
+
+    /**
+     * @internal
+     */
+    public function bytes(): string
+    {
+        return $this->data;
     }
 
     public function uint8(int $offset): int

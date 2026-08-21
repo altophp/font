@@ -14,6 +14,8 @@ declare(strict_types=1);
 namespace Alto\Font\Exception;
 
 /**
+ * Reports malformed or inconsistent font data.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final class InvalidFontException extends \RuntimeException implements FontExceptionInterface {}

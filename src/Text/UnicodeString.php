@@ -13,12 +13,14 @@ declare(strict_types=1);
 
 namespace Alto\Font\Text;
 
-use Alto\Font\Exception\InvalidFontException;
+use Alto\Font\Exception\InvalidTextException;
 
 /**
+ * Decodes valid UTF-8 text into Unicode codepoints.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
-final class UnicodeString
+final readonly class UnicodeString
 {
     /**
      * @return list<int>
@@ -26,7 +28,7 @@ final class UnicodeString
     public static function codepoints(string $text): array
     {
         if (1 !== preg_match('//u', $text)) {
-            throw new InvalidFontException('Text must be valid UTF-8.');
+            throw new InvalidTextException('Text must be valid UTF-8.');
         }
 
         $codepoints = [];

@@ -22,6 +22,8 @@ use Alto\Font\Variation\NormalizedCoordinates;
 use Alto\Font\Variation\VariationDeltas;
 
 /**
+ * Evaluates glyph deltas from a gvar table.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class GvarTable

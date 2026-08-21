@@ -13,13 +13,16 @@ declare(strict_types=1);
 
 namespace Alto\Font\Tests\Loader;
 
+use Alto\Font\Exception\GlyphNotFoundException;
 use Alto\Font\Exception\InvalidFontException;
+use Alto\Font\Exception\InvalidTextException;
 use Alto\Font\Exception\UnsupportedFontException;
 use Alto\Font\Font;
 use Alto\Font\FontFinder;
 use Alto\Font\FontQuery;
 use Alto\Font\Glyph\GlyphId;
 use Alto\Font\Loader\FontLoader;
+use Alto\Font\Metadata\FontFormat;
 use Alto\Font\Tests\Fixtures\ContourAssertions;
 use Alto\Font\Tests\Fixtures\TinyTrueTypeFont;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -29,6 +32,19 @@ use PHPUnit\Framework\TestCase;
 final class FontLoaderTest extends TestCase
 {
     use ContourAssertions;
+
+    private string $temporaryDirectory = '';
+
+    protected function setUp(): void
+    {
+        $this->temporaryDirectory = sys_get_temp_dir() . '/alto-font-loader-' . bin2hex(random_bytes(8));
+        self::assertTrue(mkdir($this->temporaryDirectory, 0700));
+    }
+
+    protected function tearDown(): void
+    {
+        $this->removeTemporaryDirectory();
+    }
 
     public function testItLoadsStaticTrueTypeMetadata(): void
     {
@@ -41,17 +57,21 @@ final class FontLoaderTest extends TestCase
         self::assertSame(5, $face->glyphCount);
         self::assertSame('Atelier Tiny', $face->name(1));
         self::assertContains('glyf', $face->tables);
+        self::assertSame(FontFormat::TrueType, $face->format);
+        self::assertSame(FontFormat::TrueType, $font->metadata()->format);
     }
 
     public function testItLoadsWoffTrueTypeContainers(): void
     {
-        $path = sys_get_temp_dir() . '/atelier-font-tiny.woff';
+        $path = $this->temporaryPath('tiny.woff');
         TinyTrueTypeFont::writeWoff($path);
         $font = self::loadFont($path);
         $glyphId = $font->glyphIdForCodepoint(65);
         self::assertNotNull($glyphId);
 
         self::assertSame(1000, $font->face()->unitsPerEm);
+        self::assertSame(FontFormat::Woff, $font->face()->format);
+        self::assertSame(FontFormat::Woff, $font->metadata()->format);
         self::assertSame('M 100 0 L 300 700 L 500 0 L 100 0 Z', self::describeContour($font->glyphOutline($glyphId)->contours[0]));
     }
 
@@ -61,13 +81,15 @@ final class FontLoaderTest extends TestCase
             self::markTestSkipped('The brotli binary is required to generate the WOFF2 fixture.');
         }
 
-        $path = sys_get_temp_dir() . '/atelier-font-tiny.woff2';
+        $path = $this->temporaryPath('tiny.woff2');
         TinyTrueTypeFont::writeWoff2($path);
         $font = self::loadFont($path);
         $glyphId = $font->glyphIdForCodepoint(65);
         self::assertNotNull($glyphId);
 
         self::assertSame(1000, $font->face()->unitsPerEm);
+        self::assertSame(FontFormat::Woff2, $font->face()->format);
+        self::assertSame(FontFormat::Woff2, $font->metadata()->format);
         self::assertSame('M 100 0 L 300 700 L 500 0 L 100 0 Z', self::describeContour($font->glyphOutline($glyphId)->contours[0]));
     }
 
@@ -77,7 +99,7 @@ final class FontLoaderTest extends TestCase
         $glyphId = $font->glyphIdForCodepoint(65);
         self::assertNotNull($glyphId);
 
-        self::assertSame('Inter', $font->getDescriptor()->family);
+        self::assertSame('Inter', $font->descriptor()->family);
         self::assertSame(2048, $font->face()->unitsPerEm);
         self::assertSame(1413, $font->glyphMetrics($glyphId)->advanceWidth);
         self::assertCount(2, $font->glyphOutline($glyphId)->contours);
@@ -106,7 +128,7 @@ final class FontLoaderTest extends TestCase
         self::assertEquals($font->face(), $font->getFace());
         self::assertEquals($font->glyphMetrics($glyphId), $font->getGlyphMetrics($glyphId));
 
-        $metrics = $font->getMetrics('A');
+        $metrics = $font->metrics('A');
 
         self::assertSame(600, $metrics->advanceWidth);
         self::assertSame(10, $metrics->leftSideBearing);
@@ -115,7 +137,7 @@ final class FontLoaderTest extends TestCase
     public function testItExposesFontDescriptor(): void
     {
         $font = Font::fromFile($this->fontPath());
-        $descriptor = $font->getDescriptor();
+        $descriptor = $font->descriptor();
         $metadata = $font->metadata();
 
         self::assertSame('Atelier Tiny', $descriptor->family);
@@ -132,7 +154,7 @@ final class FontLoaderTest extends TestCase
 
     public function testItFindsFontsThroughFontFinder(): void
     {
-        $directory = sys_get_temp_dir() . '/atelier-font-finder';
+        $directory = $this->temporaryDirectory . '/finder';
 
         if (!is_dir($directory) && !mkdir($directory, 0777, true) && !is_dir($directory)) {
             self::fail(\sprintf('Could not create "%s".', $directory));
@@ -145,17 +167,17 @@ final class FontLoaderTest extends TestCase
         self::assertTrue($finder->has('Atelier Tiny'));
         self::assertTrue($finder->has(FontQuery::family('Atelier Tiny')->weight(400)));
         self::assertFalse($finder->has('Missing Family'));
-        self::assertSame('Atelier Tiny', $finder->get('Atelier Tiny')->getDescriptor()->family);
+        self::assertSame('Atelier Tiny', $finder->get('Atelier Tiny')->descriptor()->family);
     }
 
     public function testItRejectsConvenienceMetricsForTextRuns(): void
     {
         $font = self::loadFont($this->fontPath());
 
-        $this->expectException(InvalidFontException::class);
+        $this->expectException(InvalidTextException::class);
         $this->expectExceptionMessage('Font metrics can only be read for a single glyph or character.');
 
-        $font->getMetrics('AV');
+        $font->metrics('AV');
     }
 
     public function testItExportsSimpleGlyphOutlinesAsRawContours(): void
@@ -182,10 +204,10 @@ final class FontLoaderTest extends TestCase
 
         self::assertNull($font->glyphIdForCodepoint(66));
 
-        $this->expectException(InvalidFontException::class);
+        $this->expectException(GlyphNotFoundException::class);
         $this->expectExceptionMessage('Font has no glyph for codepoint U+0042.');
 
-        $font->getMetrics('B');
+        $font->metrics('B');
     }
 
     public function testItRejectsMissingFiles(): void
@@ -222,7 +244,7 @@ final class FontLoaderTest extends TestCase
         bool $compoundCycle = false,
         bool $unsupportedCff = false,
     ): string {
-        $path = sys_get_temp_dir() . '/atelier-font-' . $filename;
+        $path = $this->temporaryPath($filename);
         TinyTrueTypeFont::write($path, $compoundCycle, $unsupportedCff);
 
         return $path;
@@ -230,7 +252,7 @@ final class FontLoaderTest extends TestCase
 
     public function testItLoadsARequestedFaceFromAFontCollection(): void
     {
-        $path = sys_get_temp_dir() . '/atelier-font-tiny.ttc';
+        $path = $this->temporaryPath('tiny.ttc');
         TinyTrueTypeFont::writeCollection($path, [1000, 2048]);
 
         $firstFace = self::loadFont($path)->face();
@@ -239,13 +261,15 @@ final class FontLoaderTest extends TestCase
         self::assertSame(1000, $firstFace->unitsPerEm);
         self::assertSame(0, $firstFace->faceIndex);
         self::assertSame(2, $firstFace->faceCount);
+        self::assertSame(FontFormat::TrueTypeCollection, $firstFace->format);
+        self::assertSame(FontFormat::TrueTypeCollection, self::loadFont($path)->metadata()->format);
         self::assertSame(2048, $secondFace->unitsPerEm);
         self::assertSame(1, $secondFace->faceIndex);
     }
 
     public function testFontFromFileAcceptsAFaceIndex(): void
     {
-        $path = sys_get_temp_dir() . '/atelier-font-tiny.ttc';
+        $path = $this->temporaryPath('tiny.ttc');
         TinyTrueTypeFont::writeCollection($path, [1000, 2048]);
 
         self::assertSame(2048, Font::fromFile($path, faceIndex: 1)->face()->unitsPerEm);
@@ -254,5 +278,36 @@ final class FontLoaderTest extends TestCase
     private static function loadFont(string $path): Font
     {
         return (new FontLoader())->load($path);
+    }
+
+    private function temporaryPath(string $filename): string
+    {
+        return $this->temporaryDirectory . '/' . $filename;
+    }
+
+    private function removeTemporaryDirectory(): void
+    {
+        if (!is_dir($this->temporaryDirectory)) {
+            return;
+        }
+
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($this->temporaryDirectory, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST,
+        );
+
+        foreach ($iterator as $entry) {
+            if (!$entry instanceof \SplFileInfo) {
+                continue;
+            }
+
+            if ($entry->isDir() && !$entry->isLink()) {
+                rmdir($entry->getPathname());
+            } else {
+                unlink($entry->getPathname());
+            }
+        }
+
+        rmdir($this->temporaryDirectory);
     }
 }

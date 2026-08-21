@@ -14,6 +14,8 @@ declare(strict_types=1);
 namespace Alto\Font\Descriptor;
 
 /**
+ * Represents a CSS-compatible font style.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 enum FontStyle: string

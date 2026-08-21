@@ -14,6 +14,8 @@ declare(strict_types=1);
 namespace Alto\Font\Locator;
 
 /**
+ * Locates candidate font files for discovery.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 interface FontLocatorInterface
