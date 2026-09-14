@@ -15,16 +15,313 @@ namespace Alto\Font\Tests\OpenType;
 
 use Alto\Font\Binary\BinaryReader;
 use Alto\Font\Exception\InvalidFontException;
+use Alto\Font\Exception\UnsupportedFontException;
 use Alto\Font\OpenType\GlyphIdMap;
 use Alto\Font\OpenType\GposCompactor;
 use Alto\Font\OpenType\Layout\ClassDefinitionTable;
 use Alto\Font\OpenType\Layout\CoverageTable;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 #[CoversClass(GposCompactor::class)]
 final class GposCompactorTest extends TestCase
 {
+    /**
+     * @param class-string<\Throwable> $exception
+     */
+    #[DataProvider('malformedLookupProvider')]
+    public function testItRejectsMalformedLookupStructures(string $gpos, string $exception, string $message): void
+    {
+        $this->expectException($exception);
+        $this->expectExceptionMessage($message);
+
+        GposCompactor::compact($gpos, GlyphIdMap::fromRetained(3, [2 => true]));
+    }
+
+    /**
+     * @return iterable<string, array{string, class-string<\Throwable>, string}>
+     */
+    public static function malformedLookupProvider(): iterable
+    {
+        $header = self::u16(1)
+            . self::u16(0)
+            . self::u16(10)
+            . self::u16(12)
+            . self::u16(14)
+            . self::u16(0)
+            . self::u16(0);
+
+        yield 'NULL lookup offset' => [
+            $header . self::u16(1) . self::u16(0),
+            InvalidFontException::class,
+            'lookup 0 offset must not be NULL',
+        ];
+        yield 'empty lookup' => [
+            self::gposWithLookup(self::u16(1) . self::u16(0) . self::u16(0)),
+            InvalidFontException::class,
+            'must contain at least one subtable',
+        ];
+        yield 'NULL subtable offset' => [
+            self::gposWithLookup(self::u16(1) . self::u16(0) . self::u16(1) . self::u16(0)),
+            InvalidFontException::class,
+            'subtable offset must not be NULL',
+        ];
+        yield 'NULL extension offset' => [
+            self::gposWithLookup(self::u16(9) . self::u16(0) . self::u16(1) . self::u16(0)),
+            InvalidFontException::class,
+            'extension offset must not be NULL',
+        ];
+        yield 'extension format' => [
+            self::gpos(9, self::u16(2) . self::u16(1) . self::u32(8)),
+            UnsupportedFontException::class,
+            'extension format is not supported',
+        ];
+        yield 'recursive extension type' => [
+            self::gpos(9, self::u16(1) . self::u16(9) . self::u32(8)),
+            UnsupportedFontException::class,
+            'extension types are invalid or inconsistent',
+        ];
+        yield 'short extension offset' => [
+            self::gpos(9, self::u16(1) . self::u16(1) . self::u32(4)),
+            InvalidFontException::class,
+            'extension offset is invalid',
+        ];
+        yield 'unknown lookup type' => [
+            self::gpos(10, self::u16(1)),
+            UnsupportedFontException::class,
+            'type 10 is not supported yet',
+        ];
+    }
+
+    #[DataProvider('unsupportedSubtableFormatProvider')]
+    public function testItRejectsUnsupportedSubtableFormats(int $lookupType, string $message): void
+    {
+        $this->expectException(UnsupportedFontException::class);
+        $this->expectExceptionMessage($message);
+
+        GposCompactor::compact(
+            self::gpos($lookupType, self::u16(0xFFFF)),
+            GlyphIdMap::fromRetained(3, [2 => true]),
+        );
+    }
+
+    /**
+     * @return iterable<string, array{int, string}>
+     */
+    public static function unsupportedSubtableFormatProvider(): iterable
+    {
+        yield 'single adjustment' => [1, 'type 1 format 65535 is not supported'];
+        yield 'pair adjustment' => [2, 'type 2 format 65535 is not supported'];
+        yield 'cursive attachment' => [3, 'type 3 requires format 1'];
+        yield 'mark to base' => [4, 'type 4 requires format 1'];
+        yield 'mark to ligature' => [5, 'type 5 requires format 1'];
+        yield 'mark to mark' => [6, 'type 6 requires format 1'];
+        yield 'contextual positioning' => [7, 'type 7 uses an unsupported format'];
+        yield 'chained contextual positioning' => [8, 'type 8 uses an unsupported format'];
+    }
+
+    #[DataProvider('malformedSubtableProvider')]
+    public function testItRejectsMalformedSubtableStructures(int $lookupType, string $subtable, string $message): void
+    {
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage($message);
+
+        GposCompactor::compact(
+            self::gpos($lookupType, $subtable),
+            GlyphIdMap::fromRetained(3, [2 => true]),
+        );
+    }
+
+    /**
+     * @return iterable<string, array{int, string, string}>
+     */
+    public static function malformedSubtableProvider(): iterable
+    {
+        $coverage = CoverageTable::build([2]);
+        $emptyCoverage = CoverageTable::build([]);
+        $classes = ClassDefinitionTable::build([2 => 1]);
+        $contextHeaderLength = 10;
+        $chainedHeaderLength = 14;
+
+        yield 'cursive coverage count' => [
+            3,
+            self::u16(1) . self::u16(6) . self::u16(0) . $coverage,
+            'cursive record count does not match coverage',
+        ];
+        yield 'empty contextual coverage sequence' => [
+            7,
+            self::u16(3) . self::u16(0) . self::u16(0),
+            'contextual glyph count must not be zero',
+        ];
+        yield 'contextual starting class outside rule sets' => [
+            7,
+            self::u16(2)
+                . self::u16($contextHeaderLength)
+                . self::u16($contextHeaderLength + \strlen($coverage))
+                . self::u16(1)
+                . self::u16(0)
+                . $coverage
+                . $classes,
+            'contextual class is outside its rule-set array',
+        ];
+        yield 'chained coverage count' => [
+            8,
+            self::u16(1) . self::u16(6) . self::u16(0) . $coverage,
+            'chained rule-set count does not match coverage',
+        ];
+        yield 'chained starting class outside rule sets' => [
+            8,
+            self::u16(2)
+                . self::u16($chainedHeaderLength)
+                . self::u16(0)
+                . self::u16($chainedHeaderLength + \strlen($coverage))
+                . self::u16(0)
+                . self::u16(1)
+                . self::u16(0)
+                . $coverage
+                . $classes,
+            'chained input class is outside its rule-set array',
+        ];
+
+        foreach ([
+            'mark to base' => [4, 'mark/base array counts do not match coverage'],
+            'mark to ligature' => [5, 'mark/ligature array counts do not match coverage'],
+            'mark to mark' => [6, 'mark array counts do not match coverage'],
+        ] as $name => [$lookupType, $message]) {
+            $secondCoverageOffset = 12 + \strlen($coverage);
+            $firstArrayOffset = $secondCoverageOffset + \strlen($emptyCoverage);
+            $secondArrayOffset = $firstArrayOffset + 2;
+
+            yield $name . ' coverage count' => [
+                $lookupType,
+                self::u16(1)
+                    . self::u16(12)
+                    . self::u16($secondCoverageOffset)
+                    . self::u16(1)
+                    . self::u16($firstArrayOffset)
+                    . self::u16($secondArrayOffset)
+                    . $coverage
+                    . $emptyCoverage
+                    . self::u16(0)
+                    . self::u16(0),
+                $message,
+            ];
+        }
+    }
+
+    public function testItUsesExtensionLookupsWhenTheLookupListOffsetsOverflow(): void
+    {
+        $glyphCount = 16384;
+        $glyphs = range(0, $glyphCount - 1);
+        $coverage = CoverageTable::build($glyphs);
+        $largeSingle = self::u16(2)
+            . self::u16(8 + $glyphCount * 2)
+            . self::u16(0x0004)
+            . self::u16($glyphCount)
+            . str_repeat("\0\0", $glyphCount)
+            . $coverage;
+        $smallSingle = self::u16(1) . self::u16(6) . self::u16(0) . CoverageTable::build([0]);
+        $retained = array_fill_keys($glyphs, true);
+        $output = GposCompactor::compact(
+            self::layoutWithTwoExtensionLookups(9, 1, $largeSingle, $smallSingle),
+            GlyphIdMap::fromRetained($glyphCount, $retained),
+        );
+        $reader = new BinaryReader($output, 'large compacted GPOS');
+        $lookupList = $reader->uint16(8);
+        $firstLookup = $lookupList + $reader->uint16($lookupList + 2);
+        $secondLookup = $lookupList + $reader->uint16($lookupList + 4);
+        $secondWrapper = $secondLookup + $reader->uint16($secondLookup + 6);
+
+        self::assertSame(2, $reader->uint16($lookupList));
+        self::assertSame([9, 9], [$reader->uint16($firstLookup), $reader->uint16($secondLookup)]);
+        self::assertSame(1, $reader->uint16($secondWrapper + 2));
+        self::assertGreaterThan(0xFFFF, $reader->uint32($secondWrapper + 4));
+    }
+
+    public function testItUsesAnExtensionLookupWhenASubtableOffsetOverflows(): void
+    {
+        $glyphCount = 16384;
+        $glyphs = range(0, $glyphCount - 1);
+        $compactCoverage = self::u16(2)
+            . self::u16(1)
+            . self::u16(0)
+            . self::u16($glyphCount - 1)
+            . self::u16(0);
+        $largeSingle = self::u16(2)
+            . self::u16(8 + $glyphCount * 2)
+            . self::u16(0x0004)
+            . self::u16($glyphCount)
+            . str_repeat("\0\0", $glyphCount)
+            . $compactCoverage;
+        $smallSingle = self::u16(1) . self::u16(6) . self::u16(0) . CoverageTable::build([0]);
+        $lookup = self::lookupWithSubtables(1, [$largeSingle, $smallSingle]);
+        $output = GposCompactor::compact(
+            self::gposWithLookup($lookup),
+            GlyphIdMap::fromRetained($glyphCount, array_fill_keys($glyphs, true)),
+        );
+        $reader = new BinaryReader($output, 'large compacted GPOS lookup');
+        $lookupList = $reader->uint16(8);
+        $newLookup = $lookupList + $reader->uint16($lookupList + 2);
+        $secondWrapper = $newLookup + $reader->uint16($newLookup + 8);
+
+        self::assertSame([9, 2], [$reader->uint16($newLookup), $reader->uint16($newLookup + 4)]);
+        self::assertSame(1, $reader->uint16($secondWrapper + 2));
+        self::assertGreaterThan(0xFFFF, $reader->uint32($secondWrapper + 4));
+    }
+
+    public function testItCanonicallyReordersTopLevelSections(): void
+    {
+        $single = self::u16(1) . self::u16(6) . self::u16(0) . CoverageTable::build([2]);
+        $lookupList = self::u16(1) . self::u16(4) . self::lookup(1, $single);
+        $scriptList = self::u16(0);
+        $featureList = self::u16(0);
+        $source = self::u16(1)
+            . self::u16(0)
+            . self::u16(10 + \strlen($lookupList))
+            . self::u16(12 + \strlen($lookupList))
+            . self::u16(10)
+            . $lookupList
+            . $scriptList
+            . $featureList;
+        $output = GposCompactor::compact($source, GlyphIdMap::fromRetained(3, [2 => true]));
+        [$reader, $offset] = self::firstSubtable($output);
+
+        self::assertSame([10, 12, 14], [
+            $reader->uint16(4),
+            $reader->uint16(6),
+            $reader->uint16(8),
+        ]);
+        self::assertSame([1], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 2)));
+    }
+
+    public function testItPreservesVersionOnePointOneFeatureVariations(): void
+    {
+        $single = self::u16(1) . self::u16(6) . self::u16(0) . CoverageTable::build([2]);
+        $scriptList = self::u16(0);
+        $featureList = self::u16(0);
+        $lookupList = self::u16(1) . self::u16(4) . self::lookup(1, $single);
+        $featureVariations = self::u16(1) . self::u16(0) . self::u32(0);
+        $featureVariationsOffset = 14 + \strlen($scriptList) + \strlen($featureList) + \strlen($lookupList);
+        $source = self::u16(1)
+            . self::u16(1)
+            . self::u16(14)
+            . self::u16(16)
+            . self::u16(18)
+            . self::u32($featureVariationsOffset)
+            . $scriptList
+            . $featureList
+            . $lookupList
+            . $featureVariations;
+        $output = GposCompactor::compact($source, GlyphIdMap::fromRetained(3, [2 => true]));
+        $reader = new BinaryReader($output, 'compacted GPOS 1.1');
+        $newFeatureVariationsOffset = $reader->uint32(10);
+
+        self::assertSame([1, 1], [$reader->uint16(0), $reader->uint16(2)]);
+        self::assertGreaterThan(18, $newFeatureVariationsOffset);
+        self::assertSame($featureVariations, $reader->string($newFeatureVariationsOffset, 8));
+    }
+
     public function testItCompactsSinglePositioningFormatOneWithADeviceTable(): void
     {
         $coverage = CoverageTable::build([2]);
@@ -163,6 +460,71 @@ final class GposCompactorTest extends TestCase
         self::assertSame(0x8000, $reader->uint16($newVariationIndex + 4));
     }
 
+    public function testItSplitsLargePairPositioningFormatOneWithoutChangingPairOrder(): void
+    {
+        $pairSetOne = self::pairSetWithSecondGlyphs(20000);
+        $pairSetTwo = self::pairSetWithSecondGlyphs(20000);
+        $coverage = CoverageTable::build([20001, 20002]);
+        $pairSetOneOffset = 14 + \strlen($coverage);
+        $pairSetTwoOffset = $pairSetOneOffset + \strlen($pairSetOne);
+        $pair = self::u16(1)
+            . self::u16(14)
+            . self::u16(0)
+            . self::u16(0)
+            . self::u16(2)
+            . self::u16($pairSetOneOffset)
+            . self::u16($pairSetTwoOffset)
+            . $coverage
+            . $pairSetOne
+            . $pairSetTwo;
+        $glyphs = range(0, 20002);
+        $output = GposCompactor::compact(
+            self::gpos(2, $pair),
+            GlyphIdMap::fromRetained(20003, array_fill_keys($glyphs, true)),
+        );
+        $reader = new BinaryReader($output, 'split compacted GPOS');
+        $lookupList = $reader->uint16(8);
+        $lookup = $lookupList + $reader->uint16($lookupList + 2);
+
+        self::assertSame(2, $reader->uint16($lookup + 4));
+
+        foreach ([0 => 20001, 1 => 20002] as $index => $firstGlyph) {
+            $subtable = $lookup + $reader->uint16($lookup + 6 + $index * 2);
+            self::assertSame([$firstGlyph], CoverageTable::parse(
+                $reader,
+                $subtable,
+                $reader->uint16($subtable + 2),
+            ));
+            self::assertSame(1, $reader->uint16($subtable + 8));
+            $pairSet = $subtable + $reader->uint16($subtable + 10);
+            self::assertSame(20000, $reader->uint16($pairSet));
+            self::assertSame(1, $reader->uint16($pairSet + 2));
+            self::assertSame(20000, $reader->uint16($pairSet + 40000));
+        }
+    }
+
+    public function testItRejectsAnIndividuallyOversizedPairSet(): void
+    {
+        $pairSet = self::pairSetWithSecondGlyphs(32762);
+        $coverage = CoverageTable::build([32762]);
+        $pair = self::u16(1)
+            . self::u16(12)
+            . self::u16(0)
+            . self::u16(0)
+            . self::u16(1)
+            . self::u16(12 + \strlen($coverage))
+            . $coverage
+            . $pairSet;
+
+        $this->expectException(UnsupportedFontException::class);
+        $this->expectExceptionMessage('PairSet that exceeds a 16-bit PairPos offset');
+
+        GposCompactor::compact(
+            self::gpos(2, $pair),
+            GlyphIdMap::fromRetained(32763, array_fill_keys(range(0, 32762), true)),
+        );
+    }
+
     public function testItCompactsMarkToBasePositioning(): void
     {
         $markCoverage = CoverageTable::build([5, 7]);
@@ -208,6 +570,210 @@ final class GposCompactorTest extends TestCase
         self::assertSame(800, $reader->int16($secondBaseAnchor + 4));
     }
 
+    public function testItCompactsCursivePositioningAndRelocatesAnchorDevices(): void
+    {
+        $coverage = CoverageTable::build([2, 5]);
+        $variationIndex = self::u16(3) . self::u16(7) . self::u16(0x8000);
+        $entry = self::u16(3)
+            . self::i16(100)
+            . self::i16(200)
+            . self::u16(10)
+            . self::u16(0)
+            . $variationIndex;
+        $exit = self::anchor(300, 400);
+        $subtable = self::u16(1)
+            . self::u16(6 + 8 + \strlen($entry) + \strlen($exit))
+            . self::u16(2)
+            . self::u16(14)
+            . self::u16(14 + \strlen($entry))
+            . self::u16(0)
+            . self::u16(0)
+            . $entry
+            . $exit
+            . $coverage;
+        $mapping = GlyphIdMap::fromRetained(6, [2 => true]);
+        [$reader, $offset] = self::firstSubtable(GposCompactor::compact(self::gpos(3, $subtable), $mapping));
+
+        self::assertSame([1], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 2)));
+        self::assertSame(1, $reader->uint16($offset + 4));
+        self::assertNotSame(0, $reader->uint16($offset + 8));
+        $newEntry = $offset + $reader->uint16($offset + 6);
+        self::assertSame(3, $reader->uint16($newEntry));
+        $newVariationIndex = $newEntry + $reader->uint16($newEntry + 6);
+        self::assertSame(3, $reader->uint16($newVariationIndex));
+        self::assertSame(7, $reader->uint16($newVariationIndex + 2));
+        self::assertSame(0x8000, $reader->uint16($newVariationIndex + 4));
+    }
+
+    public function testItCompactsMarkToLigaturePositioning(): void
+    {
+        $markCoverage = CoverageTable::build([5, 7]);
+        $ligatureCoverage = CoverageTable::build([2, 8]);
+        $markArray = self::u16(2)
+            . self::u16(0) . self::u16(10)
+            . self::u16(0) . self::u16(16)
+            . self::anchor(100, 200)
+            . self::anchor(300, 400);
+        $firstAttach = self::u16(1) . self::u16(4) . self::anchor(500, 600);
+        $secondAttach = self::u16(2)
+            . self::u16(6)
+            . self::u16(12)
+            . self::anchor(700, 800)
+            . self::anchor(900, 1000);
+        $ligatureArray = self::u16(2)
+            . self::u16(6)
+            . self::u16(6 + \strlen($firstAttach))
+            . $firstAttach
+            . $secondAttach;
+        $markCoverageOffset = 12;
+        $ligatureCoverageOffset = $markCoverageOffset + \strlen($markCoverage);
+        $markArrayOffset = $ligatureCoverageOffset + \strlen($ligatureCoverage);
+        $ligatureArrayOffset = $markArrayOffset + \strlen($markArray);
+        $subtable = self::u16(1)
+            . self::u16($markCoverageOffset)
+            . self::u16($ligatureCoverageOffset)
+            . self::u16(1)
+            . self::u16($markArrayOffset)
+            . self::u16($ligatureArrayOffset)
+            . $markCoverage
+            . $ligatureCoverage
+            . $markArray
+            . $ligatureArray;
+        $mapping = GlyphIdMap::fromRetained(10, [5 => true, 8 => true]);
+        [$reader, $offset] = self::firstSubtable(GposCompactor::compact(self::gpos(5, $subtable), $mapping));
+
+        self::assertSame([1], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 2)));
+        self::assertSame([2], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 4)));
+        $newLigatureArray = $offset + $reader->uint16($offset + 10);
+        self::assertSame(1, $reader->uint16($newLigatureArray));
+        $newAttach = $newLigatureArray + $reader->uint16($newLigatureArray + 2);
+        self::assertSame(2, $reader->uint16($newAttach));
+        $secondAnchor = $newAttach + $reader->uint16($newAttach + 4);
+        self::assertSame(900, $reader->int16($secondAnchor + 2));
+        self::assertSame(1000, $reader->int16($secondAnchor + 4));
+    }
+
+    public function testItCompactsMarkToMarkPositioning(): void
+    {
+        $markOneCoverage = CoverageTable::build([5, 7]);
+        $markTwoCoverage = CoverageTable::build([2, 8]);
+        $markOneArray = self::u16(2)
+            . self::u16(0) . self::u16(10)
+            . self::u16(0) . self::u16(16)
+            . self::anchor(100, 200)
+            . self::anchor(300, 400);
+        $markTwoArray = self::u16(2)
+            . self::u16(6)
+            . self::u16(12)
+            . self::anchor(500, 600)
+            . self::anchor(700, 800);
+        $markOneCoverageOffset = 12;
+        $markTwoCoverageOffset = $markOneCoverageOffset + \strlen($markOneCoverage);
+        $markOneArrayOffset = $markTwoCoverageOffset + \strlen($markTwoCoverage);
+        $markTwoArrayOffset = $markOneArrayOffset + \strlen($markOneArray);
+        $subtable = self::u16(1)
+            . self::u16($markOneCoverageOffset)
+            . self::u16($markTwoCoverageOffset)
+            . self::u16(1)
+            . self::u16($markOneArrayOffset)
+            . self::u16($markTwoArrayOffset)
+            . $markOneCoverage
+            . $markTwoCoverage
+            . $markOneArray
+            . $markTwoArray;
+        $mapping = GlyphIdMap::fromRetained(10, [5 => true, 8 => true]);
+        [$reader, $offset] = self::firstSubtable(GposCompactor::compact(self::gpos(6, $subtable), $mapping));
+
+        self::assertSame([1], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 2)));
+        self::assertSame([2], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 4)));
+        $newMarkTwoArray = $offset + $reader->uint16($offset + 10);
+        self::assertSame(1, $reader->uint16($newMarkTwoArray));
+        $anchor = $newMarkTwoArray + $reader->uint16($newMarkTwoArray + 2);
+        self::assertSame(700, $reader->int16($anchor + 2));
+        self::assertSame(800, $reader->int16($anchor + 4));
+    }
+
+    public function testItRemapsContextFormatOneRules(): void
+    {
+        $rule = self::u16(3)
+            . self::u16(1)
+            . self::u16(4)
+            . self::u16(5)
+            . self::u16(2)
+            . self::u16(0);
+        $set = self::u16(1) . self::u16(4) . $rule;
+        $coverage = CoverageTable::build([2]);
+        $subtable = self::u16(1)
+            . self::u16(8 + \strlen($set))
+            . self::u16(1)
+            . self::u16(8)
+            . $set
+            . $coverage;
+        $mapping = GlyphIdMap::fromRetained(6, [2 => true, 4 => true, 5 => true]);
+        [$reader, $offset] = self::firstSubtable(GposCompactor::compact(self::gpos(7, $subtable), $mapping));
+        $ruleSet = $offset + $reader->uint16($offset + 6);
+        $newRule = $ruleSet + $reader->uint16($ruleSet + 2);
+
+        self::assertSame([1], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 2)));
+        self::assertSame(2, $reader->uint16($newRule + 4));
+        self::assertSame(3, $reader->uint16($newRule + 6));
+        self::assertSame(2, $reader->uint16($newRule + 8));
+    }
+
+    public function testItRemapsContextFormatTwoClasses(): void
+    {
+        $rule = self::u16(2) . self::u16(1) . self::u16(2) . self::u16(1) . self::u16(0);
+        $set = self::u16(1) . self::u16(4) . $rule;
+        $coverage = CoverageTable::build([2, 4]);
+        $classes = ClassDefinitionTable::build([2 => 1, 4 => 2, 5 => 5]);
+        $setCount = 3;
+        $setOffset = 8 + $setCount * 2;
+        $coverageOffset = $setOffset + \strlen($set);
+        $classOffset = $coverageOffset + \strlen($coverage);
+        $subtable = self::u16(2)
+            . self::u16($coverageOffset)
+            . self::u16($classOffset)
+            . self::u16($setCount)
+            . self::u16(0)
+            . self::u16($setOffset)
+            . self::u16(0)
+            . $set
+            . $coverage
+            . $classes;
+        $mapping = GlyphIdMap::fromRetained(6, [2 => true, 5 => true]);
+        [$reader, $offset] = self::firstSubtable(GposCompactor::compact(self::gpos(7, $subtable), $mapping));
+
+        self::assertSame([1], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 2)));
+        self::assertSame(
+            [1 => 1, 2 => 5],
+            ClassDefinitionTable::parse($reader, $offset, $reader->uint16($offset + 4)),
+        );
+        self::assertSame(0, $reader->uint16($offset + 8));
+        self::assertNotSame(0, $reader->uint16($offset + 10));
+    }
+
+    public function testItRemapsContextFormatThreeCoverages(): void
+    {
+        $coverageOne = CoverageTable::build([2, 4]);
+        $coverageTwo = CoverageTable::build([5]);
+        $headerLength = 6 + 4 + 4;
+        $subtable = self::u16(3)
+            . self::u16(2)
+            . self::u16(1)
+            . self::u16($headerLength)
+            . self::u16($headerLength + \strlen($coverageOne))
+            . self::u16(1)
+            . self::u16(0)
+            . $coverageOne
+            . $coverageTwo;
+        $mapping = GlyphIdMap::fromRetained(6, [4 => true, 5 => true]);
+        [$reader, $offset] = self::firstSubtable(GposCompactor::compact(self::gpos(7, $subtable), $mapping));
+
+        self::assertSame([1], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 6)));
+        self::assertSame([2], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 8)));
+        self::assertSame(1, $reader->uint16($offset + 10));
+    }
+
     public function testItRemapsChainedContextFormatOneRules(): void
     {
         $rule = self::u16(1) . self::u16(2)
@@ -230,6 +796,185 @@ final class GposCompactorTest extends TestCase
         self::assertSame(2, $reader->uint16($newRule + 2));
         self::assertSame(3, $reader->uint16($newRule + 6));
         self::assertSame(4, $reader->uint16($newRule + 10));
+    }
+
+    public function testItRemapsChainedContextFormatTwoClasses(): void
+    {
+        $rule = self::u16(1)
+            . self::u16(1)
+            . self::u16(2)
+            . self::u16(2)
+            . self::u16(1)
+            . self::u16(1)
+            . self::u16(1)
+            . self::u16(0)
+            . self::u16(0);
+        $set = self::u16(1) . self::u16(4) . $rule;
+        $coverage = CoverageTable::build([2, 4]);
+        $backtrackClasses = ClassDefinitionTable::build([1 => 1]);
+        $inputClasses = ClassDefinitionTable::build([2 => 1, 4 => 2, 5 => 5]);
+        $lookaheadClasses = ClassDefinitionTable::build([6 => 1]);
+        $setCount = 3;
+        $setOffset = 12 + $setCount * 2;
+        $coverageOffset = $setOffset + \strlen($set);
+        $backtrackOffset = $coverageOffset + \strlen($coverage);
+        $inputOffset = $backtrackOffset + \strlen($backtrackClasses);
+        $lookaheadOffset = $inputOffset + \strlen($inputClasses);
+        $subtable = self::u16(2)
+            . self::u16($coverageOffset)
+            . self::u16($backtrackOffset)
+            . self::u16($inputOffset)
+            . self::u16($lookaheadOffset)
+            . self::u16($setCount)
+            . self::u16(0)
+            . self::u16($setOffset)
+            . self::u16(0)
+            . $set
+            . $coverage
+            . $backtrackClasses
+            . $inputClasses
+            . $lookaheadClasses;
+        $mapping = GlyphIdMap::fromRetained(7, [1 => true, 2 => true, 5 => true, 6 => true]);
+        [$reader, $offset] = self::firstSubtable(GposCompactor::compact(self::gpos(8, $subtable), $mapping));
+
+        self::assertSame([2], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 2)));
+        self::assertSame(
+            [2 => 1, 3 => 5],
+            ClassDefinitionTable::parse($reader, $offset, $reader->uint16($offset + 6)),
+        );
+        self::assertSame(0, $reader->uint16($offset + 12));
+        self::assertNotSame(0, $reader->uint16($offset + 14));
+    }
+
+    public function testItRemapsChainedContextFormatThreeCoverages(): void
+    {
+        $coverages = [
+            CoverageTable::build([1]),
+            CoverageTable::build([2, 4]),
+            CoverageTable::build([5]),
+            CoverageTable::build([6]),
+        ];
+        $headerLength = 2 + 2 + 2 + 2 + 4 + 2 + 2 + 2 + 4;
+        $coverageOffset = $headerLength;
+        $subtable = self::u16(3)
+            . self::u16(1)
+            . self::u16($coverageOffset)
+            . self::u16(2)
+            . self::u16($coverageOffset + \strlen($coverages[0]))
+            . self::u16($coverageOffset + \strlen($coverages[0]) + \strlen($coverages[1]))
+            . self::u16(1)
+            . self::u16($coverageOffset + \strlen($coverages[0]) + \strlen($coverages[1]) + \strlen($coverages[2]))
+            . self::u16(1)
+            . self::u16(1)
+            . self::u16(0)
+            . implode('', $coverages);
+        $mapping = GlyphIdMap::fromRetained(7, [1 => true, 4 => true, 5 => true, 6 => true]);
+        [$reader, $offset] = self::firstSubtable(GposCompactor::compact(self::gpos(8, $subtable), $mapping));
+
+        self::assertSame([1], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 4)));
+        self::assertSame([2], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 8)));
+        self::assertSame([3], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 10)));
+        self::assertSame([4], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 14)));
+        self::assertSame(1, $reader->uint16($offset + 16));
+    }
+
+    public function testItMaterializesNullableChainedContextClassDefinitions(): void
+    {
+        $coverage = CoverageTable::build([2]);
+        $inputClasses = ClassDefinitionTable::build([2 => 0]);
+        $setCount = 1;
+        $coverageOffset = 12 + $setCount * 2;
+        $inputOffset = $coverageOffset + \strlen($coverage);
+        $subtable = self::u16(2)
+            . self::u16($coverageOffset)
+            . self::u16(0)
+            . self::u16($inputOffset)
+            . self::u16(0)
+            . self::u16($setCount)
+            . self::u16(0)
+            . $coverage
+            . $inputClasses;
+        $mapping = GlyphIdMap::fromRetained(3, [2 => true]);
+        [$reader, $offset] = self::firstSubtable(GposCompactor::compact(self::gpos(8, $subtable), $mapping));
+
+        $backtrackOffset = $reader->uint16($offset + 4);
+        $lookaheadOffset = $reader->uint16($offset + 8);
+        self::assertNotSame(0, $backtrackOffset);
+        self::assertNotSame(0, $lookaheadOffset);
+        self::assertSame([], ClassDefinitionTable::parse($reader, $offset, $backtrackOffset));
+        self::assertSame([], ClassDefinitionTable::parse($reader, $offset, $lookaheadOffset));
+    }
+
+    public function testItRejectsOutOfRangeContextPositioningSequenceIndexes(): void
+    {
+        $coverage = CoverageTable::build([2]);
+        $headerLength = 6 + 2 + 4;
+        $subtable = self::u16(3)
+            . self::u16(1)
+            . self::u16(1)
+            . self::u16($headerLength)
+            . self::u16(1)
+            . self::u16(0)
+            . $coverage;
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('positioning record sequence index is out of range');
+
+        GposCompactor::compact(
+            self::gpos(7, $subtable),
+            GlyphIdMap::fromRetained(3, [2 => true]),
+        );
+    }
+
+    public function testItRejectsOutOfRangeContextPositioningLookupIndexes(): void
+    {
+        $coverage = CoverageTable::build([2]);
+        $headerLength = 6 + 2 + 4;
+        $subtable = self::u16(3)
+            . self::u16(1)
+            . self::u16(1)
+            . self::u16($headerLength)
+            . self::u16(0)
+            . self::u16(1)
+            . $coverage;
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('positioning record lookup index is out of range');
+
+        GposCompactor::compact(
+            self::gpos(7, $subtable),
+            GlyphIdMap::fromRetained(3, [2 => true]),
+        );
+    }
+
+    public function testItRejectsLigatureAttachmentWithNoComponents(): void
+    {
+        $markCoverage = CoverageTable::build([2]);
+        $ligatureCoverage = CoverageTable::build([3]);
+        $markArray = self::u16(1) . self::u16(0) . self::u16(6) . self::anchor(10, 20);
+        $ligatureArray = self::u16(1) . self::u16(4) . self::u16(0);
+        $markCoverageOffset = 12;
+        $ligatureCoverageOffset = $markCoverageOffset + \strlen($markCoverage);
+        $markArrayOffset = $ligatureCoverageOffset + \strlen($ligatureCoverage);
+        $ligatureArrayOffset = $markArrayOffset + \strlen($markArray);
+        $subtable = self::u16(1)
+            . self::u16($markCoverageOffset)
+            . self::u16($ligatureCoverageOffset)
+            . self::u16(1)
+            . self::u16($markArrayOffset)
+            . self::u16($ligatureArrayOffset)
+            . $markCoverage
+            . $ligatureCoverage
+            . $markArray
+            . $ligatureArray;
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('ligature component count must not be zero');
+
+        GposCompactor::compact(
+            self::gpos(5, $subtable),
+            GlyphIdMap::fromRetained(4, [2 => true, 3 => true]),
+        );
     }
 
     public function testItRejectsSinglePositioningCountsThatDoNotMatchCoverage(): void
@@ -281,11 +1026,7 @@ final class GposCompactorTest extends TestCase
     {
         $scriptList = self::u16(0);
         $featureList = self::u16(0);
-        $lookup = self::u16($lookupType)
-            . self::u16(0)
-            . self::u16(1)
-            . self::u16(8)
-            . $subtable;
+        $lookup = self::lookup($lookupType, $subtable);
         $lookupList = self::u16(1) . self::u16(4) . $lookup;
 
         return self::u16(1)
@@ -298,9 +1039,95 @@ final class GposCompactorTest extends TestCase
             . $lookupList;
     }
 
+    private static function lookup(int $lookupType, string $subtable): string
+    {
+        return self::u16($lookupType)
+            . self::u16(0)
+            . self::u16(1)
+            . self::u16(8)
+            . $subtable;
+    }
+
+    /**
+     * @param non-empty-list<string> $subtables
+     */
+    private static function lookupWithSubtables(int $type, array $subtables): string
+    {
+        $header = self::u16($type) . self::u16(0) . self::u16(\count($subtables));
+        $data = '';
+        $cursor = 6 + \count($subtables) * 2;
+
+        foreach ($subtables as $subtable) {
+            $header .= self::u16($cursor);
+            $data .= $subtable;
+            $cursor += \strlen($subtable);
+        }
+
+        return $header . $data;
+    }
+
+    private static function gposWithLookup(string $lookup): string
+    {
+        $lookupList = self::u16(1) . self::u16(4) . $lookup;
+
+        return self::u16(1)
+            . self::u16(0)
+            . self::u16(10)
+            . self::u16(12)
+            . self::u16(14)
+            . self::u16(0)
+            . self::u16(0)
+            . $lookupList;
+    }
+
+    private static function layoutWithTwoExtensionLookups(
+        int $extensionType,
+        int $actualType,
+        string $firstSubtable,
+        string $secondSubtable,
+    ): string {
+        $lookupHeader = self::u16($extensionType)
+            . self::u16(0)
+            . self::u16(1)
+            . self::u16(8);
+        $lookupList = self::u16(2)
+            . self::u16(6)
+            . self::u16(22)
+            . $lookupHeader
+            . self::u16(1)
+            . self::u16($actualType)
+            . self::u32(24)
+            . $lookupHeader
+            . self::u16(1)
+            . self::u16($actualType)
+            . self::u32(8 + \strlen($firstSubtable))
+            . $firstSubtable
+            . $secondSubtable;
+
+        return self::u16(1)
+            . self::u16(0)
+            . self::u16(10)
+            . self::u16(12)
+            . self::u16(14)
+            . self::u16(0)
+            . self::u16(0)
+            . $lookupList;
+    }
+
     private static function anchor(int $x, int $y): string
     {
         return self::u16(1) . self::i16($x) . self::i16($y);
+    }
+
+    private static function pairSetWithSecondGlyphs(int $count): string
+    {
+        $records = '';
+
+        for ($glyphId = 1; $glyphId <= $count; ++$glyphId) {
+            $records .= self::u16($glyphId);
+        }
+
+        return self::u16($count) . $records;
     }
 
     private static function i16(int $value): string

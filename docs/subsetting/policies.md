@@ -36,6 +36,16 @@ and vertical metrics, compound, GSUB, GPOS, GDEF, legacy `kern` format 0,
 `gvar`, HVAR, and VVAR mapping structures. Any glyph-indexed table that cannot
 be rewritten causes an explicit rejection.
 
+GSUB compaction covers lookup types 1 through 8, including extension lookups.
+GPOS compaction covers lookup types 1 through 9, with type 9 used for extension
+lookups. OpenType Layout 1.1 feature variations are preserved. Positioning
+records retain valid Device and VariationIndex data while their offsets are
+relocated. Non-NULL feature parameters are supported for `size`, `ss01`
+through `ss20`, and `cv01` through `cv99`; unknown parameter formats are
+rejected explicitly. Oversized PairPos format 1 data is split across lookup
+subtables. A PairPos format 2 class matrix that cannot fit its internal 16-bit
+offsets is still rejected.
+
 ## Remove hinting
 
 ```php
@@ -76,11 +86,10 @@ A view created with `withVariations()` cannot be subsetted. Return to the
 variable source with `withoutVariations()` first.
 
 Compact mode still rejects `VARC`, `BASE`, color, bitmap, mathematical tables,
-unsupported legacy kerning or OpenType Layout formats, and other glyph-indexed
-structures it cannot remap. Private `meta` data is removed because its glyph
-references cannot be remapped safely. Supporting `vhea`, `vmtx`, and VVAR does
-not imply general vertical-layout support while those companion tables remain
-unsupported.
+unsupported legacy kerning, and other glyph-indexed structures it cannot
+remap. Private `meta` data is removed because its glyph references cannot be
+remapped safely. Supporting `vhea`, `vmtx`, and VVAR does not imply general
+vertical-layout support while those companion tables remain unsupported.
 
 Always inspect `SubsetResult::$warnings` and validate the final output in the
 environment that will shape and render it.

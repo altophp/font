@@ -30,14 +30,16 @@ use Alto\Font\Exception\UnsupportedFontException;
 final readonly class GsubTable
 {
     /**
-     * @param array<int, array<int, true>>       $substitutions
      * @param list<array<int, array<int, true>>> $lookupSubstitutions
      * @param list<GsubContextRule>              $contextRules
+     * @param list<list<GsubContextRule>>        $lookupContextRules
+     * @param array<int, true>                   $rootLookupIndexes
      */
     private function __construct(
-        private array $substitutions,
         private array $lookupSubstitutions,
         private array $contextRules,
+        private array $lookupContextRules,
+        private array $rootLookupIndexes,
     ) {}
 
     public static function parse(BinaryReader $reader): self
@@ -65,7 +67,7 @@ final readonly class GsubTable
 
         $lookupSubstitutions = [];
         $contextRules = [];
-        $contextualLookupIndexes = [];
+        $lookupContextRules = [];
 
         for ($lookupIndex = 0; $lookupIndex < $lookupCount; ++$lookupIndex) {
             $lookupOffset = $reader->uint16($lookupListOffset + 2 + $lookupIndex * 2);
@@ -74,17 +76,14 @@ final readonly class GsubTable
                 throw new InvalidFontException(\sprintf('GSUB lookup %d offset must not be NULL.', $lookupIndex));
             }
 
-            $ruleCount = \count($contextRules);
+            $firstRuleIndex = \count($contextRules);
             $lookupSubstitutions[] = self::parseLookup(
                 $reader,
                 $lookupListOffset + $lookupOffset,
                 $lookupIndex,
                 $contextRules,
             );
-
-            if ($ruleCount !== \count($contextRules)) {
-                $contextualLookupIndexes[$lookupIndex] = true;
-            }
+            $lookupContextRules[] = array_slice($contextRules, $firstRuleIndex);
         }
 
         foreach ($contextRules as $rule) {
@@ -96,29 +95,15 @@ final readonly class GsubTable
                         $lookupCount,
                     ));
                 }
-
-                if (isset($contextualLookupIndexes[$record['lookupIndex']])) {
-                    throw new UnsupportedFontException(\sprintf(
-                        'GSUB contextual rule references contextual lookup index %d, which is not supported.',
-                        $record['lookupIndex'],
-                    ));
-                }
             }
         }
 
-        $substitutions = [];
-
-        foreach ($rootLookupIndexes as $lookupIndex => $_root) {
-            $lookup = $lookupSubstitutions[$lookupIndex];
-
-            foreach ($lookup as $inputGlyphId => $outputs) {
-                foreach ($outputs as $outputGlyphId => $_retained) {
-                    $substitutions[$inputGlyphId][$outputGlyphId] = true;
-                }
-            }
-        }
-
-        return new self($substitutions, $lookupSubstitutions, $contextRules);
+        return new self(
+            $lookupSubstitutions,
+            $contextRules,
+            $lookupContextRules,
+            $rootLookupIndexes,
+        );
     }
 
     /**
@@ -146,43 +131,47 @@ final readonly class GsubTable
 
         $queue = array_keys($glyphs);
         $cursor = 0;
+        $activeLookupIndexes = $this->rootLookupIndexes;
 
         while (true) {
             while ($cursor < \count($queue)) {
                 $glyphId = $queue[$cursor++];
                 self::assertGlyphId($glyphId, $glyphCount);
 
-                foreach ($this->substitutions[$glyphId] ?? [] as $outputGlyphId => $_retained) {
-                    self::retain($outputGlyphId, $glyphs, $queue);
+                foreach ($activeLookupIndexes as $lookupIndex => $_active) {
+                    foreach ($this->lookupSubstitutions[$lookupIndex][$glyphId] ?? [] as $outputGlyphId => $_retained) {
+                        self::retain($outputGlyphId, $glyphs, $queue);
+                    }
                 }
             }
 
-            $added = false;
+            $activated = false;
 
-            foreach ($this->contextRules as $rule) {
-                foreach ($rule->conditions as $condition) {
-                    if (!$condition->intersects($glyphs)) {
-                        continue 2;
-                    }
-                }
-
-                foreach ($rule->lookupRecords as $record) {
-                    $input = $rule->inputs[$record['sequenceIndex']];
-                    $lookup = $this->lookupSubstitutions[$record['lookupIndex']];
-
-                    foreach ($glyphs as $glyphId => $_retained) {
-                        if (!$input->contains($glyphId)) {
-                            continue;
+            foreach ($activeLookupIndexes as $lookupIndex => $_active) {
+                foreach ($this->lookupContextRules[$lookupIndex] as $rule) {
+                    foreach ($rule->conditions as $condition) {
+                        if (!$condition->intersects($glyphs)) {
+                            continue 2;
                         }
+                    }
 
-                        foreach ($lookup[$glyphId] ?? [] as $outputGlyphId => $_retained) {
-                            $added = self::retain($outputGlyphId, $glyphs, $queue) || $added;
+                    foreach ($rule->lookupRecords as $record) {
+                        $referencedLookupIndex = $record['lookupIndex'];
+
+                        if (!isset($activeLookupIndexes[$referencedLookupIndex])) {
+                            $activeLookupIndexes[$referencedLookupIndex] = true;
+                            $activated = true;
                         }
                     }
                 }
             }
 
-            if (!$added && $cursor >= \count($queue)) {
+            if ($activated) {
+                $cursor = 0;
+                continue;
+            }
+
+            if ($cursor >= \count($queue)) {
                 break;
             }
         }
@@ -635,9 +624,9 @@ final readonly class GsubTable
     private static function parseChainedContextFormatTwo(BinaryReader $reader, int $offset, int $lookupIndex, array &$contextRules): void
     {
         $coverage = self::coverage($reader, $offset, $reader->uint16($offset + 2));
-        $backtrackClasses = self::classDefinition($reader, $offset, $reader->uint16($offset + 4));
+        $backtrackClasses = self::optionalClassDefinition($reader, $offset, $reader->uint16($offset + 4));
         $inputClasses = self::classDefinition($reader, $offset, $reader->uint16($offset + 6));
-        $lookaheadClasses = self::classDefinition($reader, $offset, $reader->uint16($offset + 8));
+        $lookaheadClasses = self::optionalClassDefinition($reader, $offset, $reader->uint16($offset + 8));
         $setCount = $reader->uint16($offset + 10);
 
         for ($setIndex = 0; $setIndex < $setCount; ++$setIndex) {
@@ -919,6 +908,19 @@ final readonly class GsubTable
         }
 
         throw new UnsupportedFontException(\sprintf('GSUB class definition uses unsupported format %d.', $format));
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private static function optionalClassDefinition(
+        BinaryReader $reader,
+        int $subtableOffset,
+        int $classDefinitionOffset,
+    ): array {
+        return 0 === $classDefinitionOffset
+            ? []
+            : self::classDefinition($reader, $subtableOffset, $classDefinitionOffset);
     }
 
     /**

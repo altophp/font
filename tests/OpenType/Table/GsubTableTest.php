@@ -138,6 +138,18 @@ final class GsubTableTest extends TestCase
         self::assertSame([1, 2, 4], $glyphs);
     }
 
+    public function testItAcceptsNullClassDefinitionsForEmptyChainedContexts(): void
+    {
+        $gsub = self::gsubWithLookups([
+            self::lookup(6, self::chainedContextFormat2WithoutSideContexts(1)),
+            self::lookup(1, self::singleFormat2(1, 4)),
+        ], [0]);
+        $closure = GsubTable::parse(new BinaryReader($gsub, 'GSUB NULL chained classes'))
+            ->glyphClosure([1 => true], 6);
+
+        self::assertSame([1, 4], array_keys($closure));
+    }
+
     public function testVersionOnePointOneFeatureVariationsConservativelyRootEveryLookup(): void
     {
         $gsub = self::gsubWithLookups([
@@ -240,17 +252,55 @@ final class GsubTableTest extends TestCase
         GsubTable::parse(new BinaryReader(self::gsub(5, self::contextFormat3(1, 2, 2, 0)), 'GSUB'));
     }
 
-    public function testItFailsClosedWhenAContextualRuleReferencesAnotherContextualLookup(): void
+    public function testItFollowsNestedContextualLookups(): void
     {
         $gsub = self::gsubWithLookups([
-            self::lookup(5, self::contextFormat3(1, 2)),
-            self::lookup(5, self::contextFormat3WithoutRecords(1)),
+            self::lookup(5, self::contextFormat3(1, 2, 0, 1)),
+            self::lookup(5, self::contextFormat3(1, 3, 0, 2)),
+            self::lookup(1, self::singleFormat2(1, 4)),
         ], [0]);
+        $closure = GsubTable::parse(new BinaryReader($gsub, 'GSUB nested contexts'))
+            ->glyphClosure([1 => true, 2 => true, 3 => true], 5);
 
-        $this->expectException(UnsupportedFontException::class);
-        $this->expectExceptionMessage('references contextual lookup index 1');
+        self::assertSame([1, 2, 3, 4], array_keys($closure));
+    }
 
-        GsubTable::parse(new BinaryReader($gsub, 'GSUB'));
+    public function testItDoesNotActivateANestedContextualLookupUntilItsParentMatches(): void
+    {
+        $gsub = self::gsubWithLookups([
+            self::lookup(5, self::contextFormat3(1, 2, 0, 1)),
+            self::lookup(5, self::contextFormat3(1, 3, 0, 2)),
+            self::lookup(1, self::singleFormat2(1, 4)),
+        ], [0]);
+        $closure = GsubTable::parse(new BinaryReader($gsub, 'GSUB inactive nested context'))
+            ->glyphClosure([1 => true, 3 => true], 5);
+
+        self::assertSame([1, 3], array_keys($closure));
+    }
+
+    public function testItTerminatesContextualLookupCycles(): void
+    {
+        $gsub = self::gsubWithLookups([
+            self::lookup(5, self::contextFormat3SingleRecord(1, 1)),
+            self::lookup(5, self::contextFormat3SingleRecord(1, 0)),
+        ], [0]);
+        $closure = GsubTable::parse(new BinaryReader($gsub, 'GSUB contextual cycle'))
+            ->glyphClosure([1 => true], 2);
+
+        self::assertSame([1], array_keys($closure));
+    }
+
+    public function testActivatedLookupsApplyToGlyphsProducedByEarlierRecords(): void
+    {
+        $gsub = self::gsubWithLookups([
+            self::lookup(5, self::contextFormat3WithTwoRecords(1, 2, 1, 2)),
+            self::lookup(1, self::singleFormat2(1, 3)),
+            self::lookup(1, self::singleFormat2(3, 4)),
+        ], [0]);
+        $closure = GsubTable::parse(new BinaryReader($gsub, 'GSUB sequential context records'))
+            ->glyphClosure([1 => true, 2 => true], 5);
+
+        self::assertSame([1, 2, 3, 4], array_keys($closure));
     }
 
     public function testItFailsClosedForUnsupportedContextualFormats(): void
@@ -705,13 +755,35 @@ final class GsubTableTest extends TestCase
             . $secondCoverage;
     }
 
-    private static function contextFormat3WithoutRecords(int $glyphId): string
+    private static function contextFormat3SingleRecord(int $glyphId, int $lookupIndex): string
     {
         return self::u16(3)
             . self::u16(1)
-            . self::u16(0)
-            . self::u16(8)
+            . self::u16(1)
+            . self::u16(12)
+            . self::lookupRecord(0, $lookupIndex)
             . self::coverage($glyphId);
+    }
+
+    private static function contextFormat3WithTwoRecords(
+        int $firstGlyphId,
+        int $secondGlyphId,
+        int $firstLookupIndex,
+        int $secondLookupIndex,
+    ): string {
+        $firstCoverage = self::coverage($firstGlyphId);
+        $secondCoverage = self::coverage($secondGlyphId);
+        $headerLength = 18;
+
+        return self::u16(3)
+            . self::u16(2)
+            . self::u16(2)
+            . self::u16($headerLength)
+            . self::u16($headerLength + \strlen($firstCoverage))
+            . self::lookupRecord(0, $firstLookupIndex)
+            . self::lookupRecord(0, $secondLookupIndex)
+            . $firstCoverage
+            . $secondCoverage;
     }
 
     private static function chainedContextFormat1(int $backtrackGlyphId, int $inputGlyphId, int $lookaheadGlyphId): string
@@ -764,6 +836,32 @@ final class GsubTableTest extends TestCase
             . $backtrackClasses
             . $inputClasses
             . $lookaheadClasses
+            . self::coverage($inputGlyphId);
+    }
+
+    private static function chainedContextFormat2WithoutSideContexts(int $inputGlyphId): string
+    {
+        $rule = self::u16(0)
+            . self::u16(1)
+            . self::u16(0)
+            . self::u16(1)
+            . self::lookupRecord(0, 1);
+        $set = self::u16(1) . self::u16(4) . $rule;
+        $inputClasses = self::classDefinition([$inputGlyphId => 1]);
+        $headerLength = 16;
+        $inputOffset = $headerLength + \strlen($set);
+        $coverageOffset = $inputOffset + \strlen($inputClasses);
+
+        return self::u16(2)
+            . self::u16($coverageOffset)
+            . self::u16(0)
+            . self::u16($inputOffset)
+            . self::u16(0)
+            . self::u16(2)
+            . self::u16(0)
+            . self::u16($headerLength)
+            . $set
+            . $inputClasses
             . self::coverage($inputGlyphId);
     }
 

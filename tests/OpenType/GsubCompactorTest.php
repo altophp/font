@@ -28,6 +28,116 @@ use PHPUnit\Framework\TestCase;
 #[CoversClass(GsubCompactor::class)]
 final class GsubCompactorTest extends TestCase
 {
+    public function testItUsesExtensionLookupsWhenTheLookupListOffsetsOverflow(): void
+    {
+        $glyphCount = 16384;
+        $glyphs = range(0, $glyphCount - 1);
+        $coverage = CoverageTable::build($glyphs);
+        $largeSingle = self::u16(2)
+            . self::u16(6 + $glyphCount * 2)
+            . self::u16($glyphCount)
+            . pack('n*', ...$glyphs)
+            . $coverage;
+        $smallSingle = self::u16(1) . self::u16(6) . self::u16(0) . CoverageTable::build([0]);
+        $retained = array_fill_keys($glyphs, true);
+        $output = GsubCompactor::compact(
+            self::layoutWithTwoExtensionLookups(7, 1, $largeSingle, $smallSingle),
+            GlyphIdMap::fromRetained($glyphCount, $retained),
+        );
+        $reader = new BinaryReader($output, 'large compacted GSUB');
+        $lookupList = $reader->uint16(8);
+        $firstLookup = $lookupList + $reader->uint16($lookupList + 2);
+        $secondLookup = $lookupList + $reader->uint16($lookupList + 4);
+        $secondWrapper = $secondLookup + $reader->uint16($secondLookup + 6);
+
+        self::assertSame(2, $reader->uint16($lookupList));
+        self::assertSame([7, 7], [$reader->uint16($firstLookup), $reader->uint16($secondLookup)]);
+        self::assertSame(1, $reader->uint16($secondWrapper + 2));
+        self::assertGreaterThan(0xFFFF, $reader->uint32($secondWrapper + 4));
+    }
+
+    public function testItUsesAnExtensionLookupWhenASubtableOffsetOverflows(): void
+    {
+        $glyphCount = 16384;
+        $glyphs = range(0, $glyphCount - 1);
+        $compactCoverage = self::u16(2)
+            . self::u16(1)
+            . self::u16(0)
+            . self::u16($glyphCount - 1)
+            . self::u16(0);
+        $largeSingle = self::u16(2)
+            . self::u16(6 + $glyphCount * 2)
+            . self::u16($glyphCount)
+            . pack('n*', ...$glyphs)
+            . $compactCoverage;
+        $smallSingle = self::u16(1) . self::u16(6) . self::u16(0) . CoverageTable::build([0]);
+        $lookup = self::lookupWithSubtables(1, [$largeSingle, $smallSingle]);
+        $output = GsubCompactor::compact(
+            self::gsubWithLookup($lookup),
+            GlyphIdMap::fromRetained($glyphCount, array_fill_keys($glyphs, true)),
+        );
+        $reader = new BinaryReader($output, 'large compacted GSUB lookup');
+        $lookupList = $reader->uint16(8);
+        $newLookup = $lookupList + $reader->uint16($lookupList + 2);
+        $secondWrapper = $newLookup + $reader->uint16($newLookup + 8);
+
+        self::assertSame([7, 2], [$reader->uint16($newLookup), $reader->uint16($newLookup + 4)]);
+        self::assertSame(1, $reader->uint16($secondWrapper + 2));
+        self::assertGreaterThan(0xFFFF, $reader->uint32($secondWrapper + 4));
+    }
+
+    public function testItCanonicallyReordersTopLevelSections(): void
+    {
+        $single = self::u16(1) . self::u16(6) . self::u16(3) . CoverageTable::build([2]);
+        $lookupList = self::u16(1) . self::u16(4) . self::lookup(1, $single);
+        $scriptList = self::u16(0);
+        $featureList = self::u16(0);
+        $source = self::u16(1)
+            . self::u16(0)
+            . self::u16(10 + \strlen($lookupList))
+            . self::u16(12 + \strlen($lookupList))
+            . self::u16(10)
+            . $lookupList
+            . $scriptList
+            . $featureList;
+        $output = GsubCompactor::compact($source, GlyphIdMap::fromRetained(6, [2 => true, 5 => true]));
+        [$reader, $offset] = self::firstSubtable($output);
+
+        self::assertSame([10, 12, 14], [
+            $reader->uint16(4),
+            $reader->uint16(6),
+            $reader->uint16(8),
+        ]);
+        self::assertSame([1], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 2)));
+    }
+
+    public function testItPreservesVersionOnePointOneFeatureVariations(): void
+    {
+        $single = self::u16(1) . self::u16(6) . self::u16(3) . CoverageTable::build([2]);
+        $scriptList = self::u16(0);
+        $featureList = self::u16(0);
+        $lookupList = self::u16(1) . self::u16(4) . self::lookup(1, $single);
+        $featureVariations = self::u16(1) . self::u16(0) . self::u32(0);
+        $featureVariationsOffset = 14 + \strlen($scriptList) + \strlen($featureList) + \strlen($lookupList);
+        $source = self::u16(1)
+            . self::u16(1)
+            . self::u16(14)
+            . self::u16(16)
+            . self::u16(18)
+            . self::u32($featureVariationsOffset)
+            . $scriptList
+            . $featureList
+            . $lookupList
+            . $featureVariations;
+        $output = GsubCompactor::compact($source, GlyphIdMap::fromRetained(6, [2 => true, 5 => true]));
+        $reader = new BinaryReader($output, 'compacted GSUB 1.1');
+        $newFeatureVariationsOffset = $reader->uint32(10);
+
+        self::assertSame([1, 1], [$reader->uint16(0), $reader->uint16(2)]);
+        self::assertGreaterThan(18, $newFeatureVariationsOffset);
+        self::assertSame($featureVariations, $reader->string($newFeatureVariationsOffset, 8));
+    }
+
     public function testItRemapsSingleSubstitutionAndDropsUnavailablePairs(): void
     {
         $coverage = CoverageTable::build([2, 4]);
@@ -149,6 +259,148 @@ final class GsubCompactorTest extends TestCase
         self::assertSame([2, 3], [$reader->uint16($sequence + 2), $reader->uint16($sequence + 4)]);
     }
 
+    public function testItRemapsAlternateSubstitutionSetsAndDropsEmptySets(): void
+    {
+        $firstSet = self::u16(2) . self::u16(5) . self::u16(6);
+        $secondSet = self::u16(1) . self::u16(7);
+        $headerLength = 10;
+        $coverageOffset = $headerLength + \strlen($firstSet) + \strlen($secondSet);
+        $subtable = self::u16(1)
+            . self::u16($coverageOffset)
+            . self::u16(2)
+            . self::u16($headerLength)
+            . self::u16($headerLength + \strlen($firstSet))
+            . $firstSet
+            . $secondSet
+            . CoverageTable::build([2, 4]);
+        $mapping = GlyphIdMap::fromRetained(8, [2 => true, 4 => true, 6 => true]);
+        [$reader, $offset] = self::firstSubtable(GsubCompactor::compact(self::gsub(3, $subtable), $mapping));
+
+        self::assertSame(1, $reader->uint16($offset));
+        self::assertSame([1], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 2)));
+        self::assertSame(1, $reader->uint16($offset + 4));
+        $set = $offset + $reader->uint16($offset + 6);
+        self::assertSame(1, $reader->uint16($set));
+        self::assertSame(3, $reader->uint16($set + 2));
+    }
+
+    public function testItRemapsContextFormatOneGlyphRules(): void
+    {
+        $rule = self::u16(3)
+            . self::u16(1)
+            . self::u16(4)
+            . self::u16(5)
+            . self::u16(1)
+            . self::u16(0);
+        $set = self::offsetList([$rule]);
+        $subtable = self::u16(1)
+            . self::u16(8 + \strlen($set))
+            . self::u16(1)
+            . self::u16(8)
+            . $set
+            . CoverageTable::build([2]);
+        $mapping = GlyphIdMap::fromRetained(6, [2 => true, 4 => true, 5 => true]);
+        [$reader, $offset] = self::firstSubtable(GsubCompactor::compact(self::gsub(5, $subtable), $mapping));
+        $ruleSet = $offset + $reader->uint16($offset + 6);
+        $newRule = $ruleSet + $reader->uint16($ruleSet + 2);
+
+        self::assertSame([1], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 2)));
+        self::assertSame(3, $reader->uint16($newRule));
+        self::assertSame([2, 3], [$reader->uint16($newRule + 4), $reader->uint16($newRule + 6)]);
+        self::assertSame([1, 0], [$reader->uint16($newRule + 8), $reader->uint16($newRule + 10)]);
+    }
+
+    public function testItRemapsContextFormatTwoClasses(): void
+    {
+        $rule = self::u16(2)
+            . self::u16(1)
+            . self::u16(2)
+            . self::u16(1)
+            . self::u16(0);
+        $set = self::offsetList([$rule]);
+        $classes = ClassDefinitionTable::build([2 => 1, 4 => 2]);
+        $headerLength = 12;
+        $classOffset = $headerLength + \strlen($set);
+        $coverageOffset = $classOffset + \strlen($classes);
+        $subtable = self::u16(2)
+            . self::u16($coverageOffset)
+            . self::u16($classOffset)
+            . self::u16(2)
+            . self::u16(0)
+            . self::u16($headerLength)
+            . $set
+            . $classes
+            . CoverageTable::build([2]);
+        $mapping = GlyphIdMap::fromRetained(5, [2 => true, 4 => true]);
+        [$reader, $offset] = self::firstSubtable(GsubCompactor::compact(self::gsub(5, $subtable), $mapping));
+        $ruleSet = $offset + $reader->uint16($offset + 10);
+        $newRule = $ruleSet + $reader->uint16($ruleSet + 2);
+
+        self::assertSame([1], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 2)));
+        self::assertSame(
+            [1 => 1, 2 => 2],
+            ClassDefinitionTable::parse($reader, $offset, $reader->uint16($offset + 4)),
+        );
+        self::assertSame(2, $reader->uint16($newRule));
+        self::assertSame(2, $reader->uint16($newRule + 4));
+        self::assertSame([1, 0], [$reader->uint16($newRule + 6), $reader->uint16($newRule + 8)]);
+    }
+
+    public function testItRemapsContextFormatThreeCoverages(): void
+    {
+        $firstCoverage = CoverageTable::build([2, 3]);
+        $secondCoverage = CoverageTable::build([4]);
+        $headerLength = 14;
+        $subtable = self::u16(3)
+            . self::u16(2)
+            . self::u16(1)
+            . self::u16($headerLength)
+            . self::u16($headerLength + \strlen($firstCoverage))
+            . self::u16(1)
+            . self::u16(0)
+            . $firstCoverage
+            . $secondCoverage;
+        $mapping = GlyphIdMap::fromRetained(5, [2 => true, 4 => true]);
+        [$reader, $offset] = self::firstSubtable(GsubCompactor::compact(self::gsub(5, $subtable), $mapping));
+
+        self::assertSame(3, $reader->uint16($offset));
+        self::assertSame([1], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 6)));
+        self::assertSame([2], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 8)));
+        self::assertSame([1, 0], [$reader->uint16($offset + 10), $reader->uint16($offset + 12)]);
+    }
+
+    public function testItRemapsReverseChainedSingleSubstitutionThroughAnExtension(): void
+    {
+        $inputCoverage = CoverageTable::build([2, 4]);
+        $backtrackCoverage = CoverageTable::build([1]);
+        $lookaheadCoverage = CoverageTable::build([5]);
+        $headerLength = 18;
+        $subtable = self::u16(1)
+            . self::u16($headerLength)
+            . self::u16(1)
+            . self::u16($headerLength + \strlen($inputCoverage))
+            . self::u16(1)
+            . self::u16($headerLength + \strlen($inputCoverage) + \strlen($backtrackCoverage))
+            . self::u16(2)
+            . self::u16(6)
+            . self::u16(7)
+            . $inputCoverage
+            . $backtrackCoverage
+            . $lookaheadCoverage;
+        $extension = self::u16(1) . self::u16(8) . self::u32(8) . $subtable;
+        $mapping = GlyphIdMap::fromRetained(8, [1 => true, 2 => true, 5 => true, 6 => true]);
+        [$reader, $offset, $lookupType] = self::firstSubtable(GsubCompactor::compact(self::gsub(7, $extension), $mapping));
+        $reverse = $offset + $reader->uint32($offset + 4);
+
+        self::assertSame(7, $lookupType);
+        self::assertSame(8, $reader->uint16($offset + 2));
+        self::assertSame([2], CoverageTable::parse($reader, $reverse, $reader->uint16($reverse + 2)));
+        self::assertSame([1], CoverageTable::parse($reader, $reverse, $reader->uint16($reverse + 6)));
+        self::assertSame([3], CoverageTable::parse($reader, $reverse, $reader->uint16($reverse + 10)));
+        self::assertSame(1, $reader->uint16($reverse + 12));
+        self::assertSame(4, $reader->uint16($reverse + 14));
+    }
+
     public function testItRemapsChainedContextFormatThreeLookups(): void
     {
         $mapping = GlyphIdMap::fromRetained(6, [1 => true, 4 => true]);
@@ -199,7 +451,7 @@ final class GsubCompactorTest extends TestCase
             . self::u16(0);
         $set = self::u16(1) . self::u16(4) . $rule;
         $backtrackClasses = ClassDefinitionTable::build([2 => 1]);
-        $inputClasses = ClassDefinitionTable::build([4 => 1]);
+        $inputClasses = ClassDefinitionTable::build([4 => 1, 5 => 7]);
         $lookaheadClasses = ClassDefinitionTable::build([5 => 1]);
         $headerLength = 16;
         $backtrackOffset = $headerLength + \strlen($set);
@@ -228,7 +480,7 @@ final class GsubCompactorTest extends TestCase
             ClassDefinitionTable::parse($reader, $offset, $reader->uint16($offset + 4)),
         );
         self::assertSame(
-            [2 => 1],
+            [2 => 1, 3 => 7],
             ClassDefinitionTable::parse($reader, $offset, $reader->uint16($offset + 6)),
         );
         self::assertSame(
@@ -237,6 +489,45 @@ final class GsubCompactorTest extends TestCase
         );
         self::assertSame(0, $reader->uint16($offset + 12));
         self::assertNotSame(0, $reader->uint16($offset + 14));
+    }
+
+    public function testItAcceptsNullOptionalChainedContextClassDefinitions(): void
+    {
+        $rule = self::u16(0)
+            . self::u16(1)
+            . self::u16(0)
+            . self::u16(0);
+        $set = self::offsetList([$rule]);
+        $inputClasses = ClassDefinitionTable::build([4 => 1]);
+        $headerLength = 16;
+        $inputOffset = $headerLength + \strlen($set);
+        $coverageOffset = $inputOffset + \strlen($inputClasses);
+        $subtable = self::u16(2)
+            . self::u16($coverageOffset)
+            . self::u16(0)
+            . self::u16($inputOffset)
+            . self::u16(0)
+            . self::u16(2)
+            . self::u16(0)
+            . self::u16($headerLength)
+            . $set
+            . $inputClasses
+            . CoverageTable::build([4]);
+        $mapping = GlyphIdMap::fromRetained(5, [4 => true]);
+        [$reader, $offset] = self::firstSubtable(GsubCompactor::compact(self::gsub(6, $subtable), $mapping));
+
+        self::assertSame(
+            [],
+            ClassDefinitionTable::parse($reader, $offset, $reader->uint16($offset + 4)),
+        );
+        self::assertSame(
+            [],
+            ClassDefinitionTable::parse($reader, $offset, $reader->uint16($offset + 8)),
+        );
+        self::assertSame(
+            [1 => 1],
+            ClassDefinitionTable::parse($reader, $offset, $reader->uint16($offset + 6)),
+        );
     }
 
     public function testItRejectsASequenceCountThatDoesNotMatchCoverage(): void
@@ -269,6 +560,22 @@ final class GsubCompactorTest extends TestCase
         );
     }
 
+    public function testItPreservesNullContextRuleSetsAsEmptySets(): void
+    {
+        $subtable = self::u16(1)
+            . self::u16(8)
+            . self::u16(1)
+            . self::u16(0)
+            . self::coverage(1);
+        [$reader, $offset] = self::firstSubtable(GsubCompactor::compact(
+            self::gsub(5, $subtable),
+            GlyphIdMap::fromRetained(2, [1 => true]),
+        ));
+
+        self::assertSame(0, $reader->uint16($offset + 4));
+        self::assertSame([], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 2)));
+    }
+
     /**
      * @param class-string<\Throwable> $exception
      */
@@ -292,12 +599,12 @@ final class GsubCompactorTest extends TestCase
         yield 'unsupported version' => [
             substr_replace(self::gsub(1, self::u16(1)), self::u16(2), 0, 2),
             UnsupportedFontException::class,
-            'version 1.0 only',
+            'versions 1.0 and 1.1 only',
         ];
-        yield 'unordered lists' => [
+        yield 'invalid script list offset' => [
             substr_replace(self::gsub(1, self::u16(1)), self::u16(0), 4, 2),
-            UnsupportedFontException::class,
-            'requires ordered script, feature, and lookup lists',
+            InvalidFontException::class,
+            'script list offset is invalid',
         ];
         yield 'NULL lookup' => [
             self::patchLookupList(self::gsub(1, self::u16(1)), 2, 0),
@@ -313,6 +620,21 @@ final class GsubCompactorTest extends TestCase
             self::patchLookup(self::gsub(1, self::u16(1)), 6, 0),
             InvalidFontException::class,
             'subtable offset must not be NULL',
+        ];
+        yield 'NULL extension' => [
+            self::patchLookup(self::gsub(7, self::u16(1)), 6, 0),
+            InvalidFontException::class,
+            'extension offset must not be NULL',
+        ];
+        yield 'unsupported extension format' => [
+            self::gsub(7, self::u16(2)),
+            UnsupportedFontException::class,
+            'extension format is not supported',
+        ];
+        yield 'invalid extension offset' => [
+            self::gsub(7, self::u16(1) . self::u16(1) . self::u32(4)),
+            InvalidFontException::class,
+            'extension offset is invalid',
         ];
         yield 'unsupported single format' => [
             self::gsub(1, self::u16(3)),
@@ -345,6 +667,27 @@ final class GsubCompactorTest extends TestCase
             InvalidFontException::class,
             'sequence offset must not be NULL',
         ];
+        yield 'invalid alternate format' => [
+            self::gsub(3, self::u16(2)),
+            InvalidFontException::class,
+            'type 3 format must be 1',
+        ];
+        yield 'mismatched alternate sets' => [
+            self::gsub(3, self::u16(1) . self::u16(8) . self::u16(0) . self::u16(0) . self::coverage(1)),
+            InvalidFontException::class,
+            'alternate-set count does not match coverage',
+        ];
+        yield 'invalid alternate set offset' => [
+            self::gsub(3, self::u16(1) . self::u16(8) . self::u16(1) . self::u16(0) . self::coverage(1)),
+            InvalidFontException::class,
+            'alternate-set offset is invalid',
+        ];
+        yield 'invalid alternate coverage offset' => [
+            self::gsub(3, self::u16(1) . self::u16(6) . self::u16(1)
+                . self::u16(1) . self::u16(1) . self::u16(1)),
+            InvalidFontException::class,
+            'alternate coverage offset is invalid',
+        ];
         yield 'unsupported ligature format' => [
             self::gsub(4, self::u16(2)),
             UnsupportedFontException::class,
@@ -361,10 +704,165 @@ final class GsubCompactorTest extends TestCase
             InvalidFontException::class,
             'ligature offset must not be NULL',
         ];
+        yield 'invalid context format' => [
+            self::gsub(5, self::u16(4)),
+            InvalidFontException::class,
+            'type 5 format must be 1, 2, or 3',
+        ];
+        yield 'invalid context sequence rule offset' => [
+            self::gsub(5, self::u16(1) . self::u16(12) . self::u16(1) . self::u16(8)
+                . self::u16(1) . self::u16(0) . self::coverage(1)),
+            InvalidFontException::class,
+            'sequence rule offset is invalid',
+        ];
+        yield 'mismatched context rule sets' => [
+            self::gsub(5, self::u16(1) . self::u16(8) . self::u16(0) . self::u16(0) . self::coverage(1)),
+            InvalidFontException::class,
+            'sequence rule-set count does not match coverage',
+        ];
+        yield 'invalid context coverage offset' => [
+            self::gsub(5, self::u16(1) . self::u16(6) . self::u16(1)
+                . self::u16(1) . self::u16(1) . self::u16(1)),
+            InvalidFontException::class,
+            'context coverage offset is invalid',
+        ];
+        yield 'invalid context rule-set offset' => [
+            self::gsub(5, self::u16(1) . self::u16(8) . self::u16(1) . self::u16(6) . self::coverage(1)),
+            InvalidFontException::class,
+            'sequence rule-set offset is invalid',
+        ];
+        $classOutsideSource = ClassDefinitionTable::build([10 => 1]);
+        yield 'context class glyph outside source font' => [
+            self::gsub(5, self::u16(2)
+                . self::u16(12 + \strlen($classOutsideSource))
+                . self::u16(12)
+                . self::u16(2)
+                . self::u16(0)
+                . self::u16(0)
+                . $classOutsideSource
+                . self::coverage(1)),
+            InvalidFontException::class,
+            'references glyph 10 outside the source font',
+        ];
+        $invalidInitialClass = ClassDefinitionTable::build([1 => 2]);
+        yield 'context initial class without rule set' => [
+            self::gsub(5, self::u16(2)
+                . self::u16(12 + \strlen($invalidInitialClass))
+                . self::u16(12)
+                . self::u16(2)
+                . self::u16(0)
+                . self::u16(0)
+                . $invalidInitialClass
+                . self::coverage(1)),
+            InvalidFontException::class,
+            'class sequence rule-set count is invalid',
+        ];
+        $contextClasses = ClassDefinitionTable::build([1 => 0]);
+        yield 'invalid context class rule-set offset' => [
+            self::gsub(5, self::u16(2)
+                . self::u16(10 + \strlen($contextClasses))
+                . self::u16(10)
+                . self::u16(1)
+                . self::u16(2)
+                . $contextClasses
+                . self::coverage(1)),
+            InvalidFontException::class,
+            'class sequence rule-set offset is invalid',
+        ];
+        $invalidClassRuleSet = self::u16(1) . self::u16(2);
+        yield 'invalid context class rule offset' => [
+            self::gsub(5, self::u16(2)
+                . self::u16(10 + \strlen($invalidClassRuleSet) + \strlen($contextClasses))
+                . self::u16(10 + \strlen($invalidClassRuleSet))
+                . self::u16(1)
+                . self::u16(10)
+                . $invalidClassRuleSet
+                . $contextClasses
+                . self::coverage(1)),
+            InvalidFontException::class,
+            'class sequence rule offset is invalid',
+        ];
+        yield 'invalid format three context coverage offset' => [
+            self::gsub(5, self::u16(3) . self::u16(1) . self::u16(0) . self::u16(6)),
+            InvalidFontException::class,
+            'context coverage offset is invalid',
+        ];
+        $zeroGlyphRule = self::u16(0) . self::u16(0);
+        $zeroGlyphSet = self::offsetList([$zeroGlyphRule]);
+        yield 'empty context glyph rule' => [
+            self::gsub(5, self::u16(1)
+                . self::u16(8 + \strlen($zeroGlyphSet))
+                . self::u16(1)
+                . self::u16(8)
+                . $zeroGlyphSet
+                . self::coverage(1)),
+            InvalidFontException::class,
+            'sequence rule glyph count must not be zero',
+        ];
+        $zeroClassRule = self::u16(0) . self::u16(0);
+        $zeroClassSet = self::offsetList([$zeroClassRule]);
+        yield 'empty context class rule' => [
+            self::gsub(5, self::u16(2)
+                . self::u16(10 + \strlen($zeroClassSet) + \strlen($contextClasses))
+                . self::u16(10 + \strlen($zeroClassSet))
+                . self::u16(1)
+                . self::u16(10)
+                . $zeroClassSet
+                . $contextClasses
+                . self::coverage(1)),
+            InvalidFontException::class,
+            'class sequence rule glyph count must not be zero',
+        ];
+        yield 'empty context coverage sequence' => [
+            self::gsub(5, self::u16(3) . self::u16(0) . self::u16(0)),
+            InvalidFontException::class,
+            'coverage sequence must not be empty',
+        ];
+        yield 'missing nested context lookup' => [
+            self::gsub(5, self::u16(3) . self::u16(1) . self::u16(1) . self::u16(12)
+                . self::u16(0) . self::u16(1) . self::coverage(1)),
+            InvalidFontException::class,
+            'sequence record references missing lookup 1',
+        ];
+        yield 'missing context input position' => [
+            self::gsub(5, self::u16(3) . self::u16(1) . self::u16(1) . self::u16(12)
+                . self::u16(1) . self::u16(0) . self::coverage(1)),
+            InvalidFontException::class,
+            'sequence record references missing input position 1',
+        ];
         yield 'unsupported chained context format' => [
             self::gsub(6, self::u16(4)),
             UnsupportedFontException::class,
             'type 6 uses an unsupported format',
+        ];
+        yield 'missing chained context input position' => [
+            self::gsub(6, self::u16(3) . self::u16(0) . self::u16(1) . self::u16(16)
+                . self::u16(0) . self::u16(1) . self::u16(1) . self::u16(0) . self::coverage(1)),
+            InvalidFontException::class,
+            'sequence record references missing input position 1',
+        ];
+        yield 'invalid reverse context format' => [
+            self::gsub(8, self::u16(2)),
+            InvalidFontException::class,
+            'type 8 format must be 1',
+        ];
+        yield 'mismatched reverse substitutions' => [
+            self::gsub(8, self::u16(1) . self::u16(10) . self::u16(0) . self::u16(0)
+                . self::u16(0) . self::coverage(1)),
+            InvalidFontException::class,
+            'reverse-substitution count does not match coverage',
+        ];
+        yield 'invalid reverse context coverage offset' => [
+            self::gsub(8, self::u16(1) . self::u16(14) . self::u16(1) . self::u16(0)
+                . self::u16(0) . self::u16(1) . self::u16(2) . self::coverage(1)),
+            InvalidFontException::class,
+            'reverse-context coverage offset is invalid',
+        ];
+        yield 'invalid reverse input coverage offset' => [
+            self::gsub(8, self::u16(1) . self::u16(8) . self::u16(0) . self::u16(0)
+                . self::u16(1) . self::u16(1) . self::u16(1)),
+            InvalidFontException::class,
+            'reverse input coverage offset is invalid',
         ];
     }
 
@@ -460,6 +958,72 @@ final class GsubCompactorTest extends TestCase
             . self::u16(1)
             . self::u16(8)
             . $subtable;
+    }
+
+    /**
+     * @param non-empty-list<string> $subtables
+     */
+    private static function lookupWithSubtables(int $type, array $subtables): string
+    {
+        $header = self::u16($type) . self::u16(0) . self::u16(\count($subtables));
+        $data = '';
+        $cursor = 6 + \count($subtables) * 2;
+
+        foreach ($subtables as $subtable) {
+            $header .= self::u16($cursor);
+            $data .= $subtable;
+            $cursor += \strlen($subtable);
+        }
+
+        return $header . $data;
+    }
+
+    private static function gsubWithLookup(string $lookup): string
+    {
+        $lookupList = self::offsetList([$lookup]);
+
+        return self::u16(1)
+            . self::u16(0)
+            . self::u16(10)
+            . self::u16(12)
+            . self::u16(14)
+            . self::u16(0)
+            . self::u16(0)
+            . $lookupList;
+    }
+
+    private static function layoutWithTwoExtensionLookups(
+        int $extensionType,
+        int $actualType,
+        string $firstSubtable,
+        string $secondSubtable,
+    ): string {
+        $lookupHeader = self::u16($extensionType)
+            . self::u16(0)
+            . self::u16(1)
+            . self::u16(8);
+        $lookupList = self::u16(2)
+            . self::u16(6)
+            . self::u16(22)
+            . $lookupHeader
+            . self::u16(1)
+            . self::u16($actualType)
+            . self::u32(24)
+            . $lookupHeader
+            . self::u16(1)
+            . self::u16($actualType)
+            . self::u32(8 + \strlen($firstSubtable))
+            . $firstSubtable
+            . $secondSubtable;
+
+        return self::u16(1)
+            . self::u16(0)
+            . self::u16(10)
+            . self::u16(12)
+            . self::u16(14)
+            . self::u16(0)
+            . self::u16(0)
+            . $lookupList;
     }
 
     private static function coverage(int $glyphId): string
