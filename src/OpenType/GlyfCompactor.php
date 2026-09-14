@@ -35,9 +35,9 @@ final readonly class GlyfCompactor
     private const int WE_HAVE_A_TWO_BY_TWO = 0x0080;
 
     private const array SUPPORTED_TABLES = [
-        'DSIG', 'HVAR', 'MERG', 'MVAR', 'OS/2', 'STAT', 'avar', 'cmap', 'cvar', 'cvt ',
+        'DSIG', 'HVAR', 'MERG', 'MVAR', 'OS/2', 'STAT', 'VVAR', 'avar', 'cmap', 'cvar', 'cvt ',
         'fpgm', 'fvar', 'gasp', 'glyf', 'gvar', 'head', 'hhea', 'hmtx', 'loca',
-        'maxp', 'meta', 'name', 'post', 'prep', 'trak',
+        'kern', 'maxp', 'meta', 'name', 'post', 'prep', 'trak', 'vhea', 'vmtx',
     ];
 
     private const array DROPPABLE_HINTING_TABLES = [
@@ -157,6 +157,50 @@ final readonly class GlyfCompactor
             $replacements['HVAR'] = HvarCompactor::compact($hvar, $glyphIds);
         }
 
+        $vhea = $document->table('vhea');
+        $vmtx = $document->table('vmtx');
+        $vvar = $document->table('VVAR');
+
+        if ((null === $vhea) !== (null === $vmtx)) {
+            throw new InvalidFontException('Compact vertical metrics require vhea and vmtx together.');
+        }
+
+        if (null !== $vhea && null !== $vmtx) {
+            $verticalMetrics = VerticalMetricsCompactor::compact(
+                $vhea,
+                $vmtx,
+                $glyf,
+                $newOffsets,
+                $glyphIds,
+            );
+            $replacements['vhea'] = $verticalMetrics['vhea'];
+            $replacements['vmtx'] = $verticalMetrics['vmtx'];
+        }
+
+        if (null !== $vvar) {
+            $fvar = $document->table('fvar');
+
+            if (null === $fvar || null === $vhea) {
+                throw new InvalidFontException('Compact VVAR output requires fvar, vhea, and vmtx tables.');
+            }
+
+            if (\strlen($fvar) < 12) {
+                throw new InvalidFontException('SFNT fvar table is truncated.');
+            }
+
+            $replacements['VVAR'] = VvarCompactor::compact(
+                $vvar,
+                $glyphIds,
+                (new BinaryReader($fvar, 'fvar VVAR compaction'))->uint16(8),
+            );
+        }
+
+        $kern = $document->table('kern');
+
+        if (null !== $kern) {
+            $replacements['kern'] = KernCompactor::compact($kern, $glyphIds);
+        }
+
         $merg = $document->table('MERG');
 
         if (null !== $merg) {
@@ -237,7 +281,19 @@ final readonly class GlyfCompactor
         }
 
         if (null !== $document->table('fvar')) {
-            $warnings[] = 'Variable glyph and horizontal-metric mappings were compacted; axes and axis metadata were preserved.';
+            $warnings[] = 'Variable glyph and metric mappings were compacted; axes and axis metadata were preserved.';
+        }
+
+        if (null !== $vhea) {
+            $warnings[] = 'Vertical metrics were compacted with remapped glyph IDs.';
+        }
+
+        if (null !== $vvar) {
+            $warnings[] = 'VVAR vertical-metric mappings were compacted; its ItemVariationStore was preserved.';
+        }
+
+        if (null !== $kern) {
+            $warnings[] = 'Legacy kern pairs were compacted with remapped glyph IDs.';
         }
 
         return new GlyfSubset(

@@ -15,6 +15,7 @@ namespace Alto\Font\Tests\Validation;
 
 use Alto\Font\Compression\BrotliExtensionCompressor;
 use Alto\Font\Font;
+use Alto\Font\OpenType\SfntFont;
 use Alto\Font\Subset\GlyphIdPolicy;
 use Alto\Font\Subset\HintingPolicy;
 use Alto\Font\Subset\LayoutPolicy;
@@ -49,6 +50,16 @@ final class OpenTypeSanitizerTest extends TestCase
                     layout: LayoutPolicy::Drop,
                 ))->font,
             ];
+            $fonts['compact legacy kern'] = self::withLegacyKern($font)->subset(new SubsetOptions(
+                UnicodeSet::fromText('AV'),
+                glyphIds: GlyphIdPolicy::Compact,
+                layout: LayoutPolicy::Drop,
+            ))->font;
+            $fonts['compact vertical metrics'] = self::withVerticalMetrics($font)->subset(new SubsetOptions(
+                UnicodeSet::fromText('AV'),
+                glyphIds: GlyphIdPolicy::Compact,
+                layout: LayoutPolicy::Drop,
+            ))->font;
 
             foreach ($fonts as $scenario => $generatedFont) {
                 $prefix = $directory . '/' . str_replace(' ', '-', $scenario);
@@ -78,6 +89,54 @@ final class OpenTypeSanitizerTest extends TestCase
 
             rmdir($directory);
         }
+    }
+
+    private static function withLegacyKern(Font $font): Font
+    {
+        $left = $font->glyphIdForCodepoint(65)?->value;
+        $right = $font->glyphIdForCodepoint(86)?->value;
+        self::assertNotNull($left);
+        self::assertNotNull($right);
+        $kern = self::u16(0)
+            . self::u16(1)
+            . self::u16(0)
+            . self::u16(20)
+            . self::u16(1)
+            . self::u16(1)
+            . self::u16(6)
+            . self::u16(0)
+            . self::u16(0)
+            . self::u16($left)
+            . self::u16($right)
+            . self::u16(-80);
+
+        return self::withTables($font, ['kern' => $kern]);
+    }
+
+    private static function withVerticalMetrics(Font $font): Font
+    {
+        $vhea = str_repeat("\0", 36);
+        $vhea = substr_replace($vhea, pack('N', 0x00011000), 0, 4);
+        $vhea = substr_replace($vhea, self::u16(1000), 10, 2);
+        $vhea = substr_replace($vhea, self::u16($font->face()->glyphCount), 34, 2);
+
+        return self::withTables($font, [
+            'vhea' => $vhea,
+            'vmtx' => str_repeat(self::u16(1000) . self::u16(0), $font->face()->glyphCount),
+        ]);
+    }
+
+    /**
+     * @param array<string, string> $tables
+     */
+    private static function withTables(Font $font, array $tables): Font
+    {
+        return new Font(SfntFont::parse($font->sfntDocument()->withTables($tables)->toSfnt()));
+    }
+
+    private static function u16(int $value): string
+    {
+        return pack('n', $value & 0xFFFF);
     }
 
     /**
@@ -123,7 +182,7 @@ final class OpenTypeSanitizerTest extends TestCase
             [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
             $pipes,
         );
-        self::assertIsResource($process, 'Unable to start Python for OpenType Sanitizer.');
+        self::assertIsResource($process, 'Unable to start OpenType Sanitizer.');
 
         $output = stream_get_contents($pipes[1]);
         $error = stream_get_contents($pipes[2]);

@@ -92,6 +92,11 @@ final readonly class GlyphIdMap implements \Countable
         return $this->oldIdsByNewId[$newId];
     }
 
+    public function sourceGlyphCount(): int
+    {
+        return $this->sourceGlyphCount;
+    }
+
     /**
      * @return \Generator<int, int>
      */

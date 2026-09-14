@@ -81,7 +81,7 @@ Read [Font basics](docs/fonts.md) for the vocabulary used by the package.
 | WOFF 1 | Supported | Supported |
 | WOFF2 | Supported, including transformed `glyf`, `loca`, and `hmtx` | Supported with an injected Brotli compressor |
 | TTC and OTC collections | Supported with `faceIndex` | Selected faces can be extracted |
-| Variable `glyf` fonts | Supported through `fvar`, `avar`, `gvar`, and `HVAR` | Axes can be preserved while subsetting |
+| Variable `glyf` fonts | Supported through `fvar`, `avar`, `gvar`, and `HVAR` | Axes can be preserved; compact subsets remap supported HVAR and VVAR metrics |
 | CFF/CFF2 outlines, WOFF2 collections, and color glyphs | Not supported | Not supported |
 
 Read [Font formats](docs/formats.md) for requirements, boundaries, and failure

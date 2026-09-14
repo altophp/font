@@ -206,6 +206,15 @@ final class TinyTrueTypeFont
         file_put_contents($path, self::sfnt($tables));
     }
 
+    public static function writeWithKern(string $path): void
+    {
+        $tables = self::tables(compoundCycle: false, unsupportedCff: false);
+        $tables['kern'] = self::kern();
+        ksort($tables);
+
+        file_put_contents($path, self::sfnt($tables));
+    }
+
     public static function writeVariable(string $path): void
     {
         $tables = self::tables(compoundCycle: false, unsupportedCff: false);
@@ -313,6 +322,18 @@ final class TinyTrueTypeFont
             $tables['gvar'] = self::gvar();
         }
 
+        ksort($tables);
+
+        file_put_contents($path, self::sfnt($tables));
+    }
+
+    public static function writeVariableWithVvar(string $path): void
+    {
+        $tables = self::tables(compoundCycle: false, unsupportedCff: false);
+        $tables['fvar'] = self::fvar();
+        $tables['vhea'] = self::vhea();
+        $tables['vmtx'] = self::vmtx();
+        $tables['VVAR'] = self::vvar();
         ksort($tables);
 
         file_put_contents($path, self::sfnt($tables));
@@ -735,6 +756,27 @@ final class TinyTrueTypeFont
         return $data;
     }
 
+    private static function vhea(): string
+    {
+        $data = str_repeat("\0", 36);
+        self::put($data, 0, self::u32(0x00011000));
+        self::put($data, 4, self::i16(500));
+        self::put($data, 6, self::i16(-500));
+        self::put($data, 10, self::u16(1200));
+        self::put($data, 34, self::u16(3));
+
+        return $data;
+    }
+
+    private static function vmtx(): string
+    {
+        return self::u16(1000).self::i16(0)
+            .self::u16(1100).self::i16(10)
+            .self::u16(1200).self::i16(20)
+            .self::i16(30)
+            .self::i16(40);
+    }
+
     private static function maxp(): string
     {
         return "\x00\x01\x00\x00".self::u16(5).str_repeat("\0", 26);
@@ -954,6 +996,45 @@ final class TinyTrueTypeFont
             .$advanceMap
             .$leftSideBearingMap
             .$rightSideBearingMap;
+    }
+
+    private static function vvar(): string
+    {
+        $store = self::itemVariationStore();
+        $advanceMap = self::deltaSetIndexMap([0, 0, 0, 0, 0]);
+        $topSideBearingMap = self::deltaSetIndexMap([1, 1, 1, 1, 1]);
+        $itemVariationStoreOffset = 24;
+        $advanceMapOffset = $itemVariationStoreOffset + \strlen($store);
+        $topSideBearingMapOffset = $advanceMapOffset + \strlen($advanceMap);
+
+        return self::u16(1)
+            .self::u16(0)
+            .self::u32($itemVariationStoreOffset)
+            .self::u32($advanceMapOffset)
+            .self::u32($topSideBearingMapOffset)
+            .self::u32(0)
+            .self::u32(0)
+            .$store
+            .$advanceMap
+            .$topSideBearingMap;
+    }
+
+    private static function kern(): string
+    {
+        $pairs = self::u16(1).self::u16(2).self::i16(-80)
+            .self::u16(1).self::u16(4).self::i16(-20)
+            .self::u16(2).self::u16(4).self::i16(-40);
+
+        return self::u16(0)
+            .self::u16(1)
+            .self::u16(0)
+            .self::u16(32)
+            .self::u16(1)
+            .self::u16(3)
+            .self::u16(12)
+            .self::u16(1)
+            .self::u16(6)
+            .$pairs;
     }
 
     private static function itemVariationStore(): string

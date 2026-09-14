@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Compact legacy `kern` format 0 pairs and vertical `vhea`, `vmtx`, and VVAR
+  mappings when glyph IDs are renumbered.
 - Add documentation.
 - Write supported faces as standalone SFNT, WOFF, and WOFF2 files.
 - Create conservative Unicode subsets with optional glyph compaction, layout

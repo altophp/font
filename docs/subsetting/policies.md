@@ -31,9 +31,10 @@ $result = $font->subset(new SubsetOptions(
 ```
 
 Compact mode renumbers retained glyphs and removes PostScript glyph names by
-writing `post` format 3 when required. It rewrites supported `cmap`, metrics,
-compound, GSUB, GPOS, GDEF, `gvar`, and HVAR structures. Any glyph-indexed table
-that cannot be rewritten causes an explicit rejection.
+writing `post` format 3 when required. It rewrites supported `cmap`, horizontal
+and vertical metrics, compound, GSUB, GPOS, GDEF, legacy `kern` format 0,
+`gvar`, HVAR, and VVAR mapping structures. Any glyph-indexed table that cannot
+be rewritten causes an explicit rejection.
 
 ## Remove hinting
 
@@ -55,6 +56,9 @@ This removes glyph instructions and the related `cvar`, `cvt `, `fpgm`,
 required GDEF data while removing GPOS positioning. `LayoutPolicy::Drop`
 removes GSUB, GPOS, and GDEF entirely.
 
+This policy controls OpenType Layout tables. A legacy `kern` table is preserved
+and remapped independently when its subtables use supported format 0.
+
 Dropping layout is appropriate only for controlled content such as digits,
 icons, or isolated symbols. It is unsafe for general prose or scripts that
 depend on shaping and mark positioning.
@@ -63,15 +67,20 @@ depend on shaping and mark positioning.
 
 Supported variable TrueType subsets preserve all axes. Compact mode remaps
 per-glyph `gvar` blocks and HVAR mappings while preserving supported axis data.
-This is not static instancing or axis-range reduction.
+When `vhea` and `vmtx` are present, their glyph metrics are remapped together;
+VVAR mappings are also remapped when present. The HVAR and VVAR
+`ItemVariationStore` data is preserved rather than reduced. This is not static
+instancing or axis-range reduction.
 
 A view created with `withVariations()` cannot be subsetted. Return to the
 variable source with `withoutVariations()` first.
 
-Compact mode rejects `VVAR`, `VARC`, vertical metrics, kerning, color, bitmap,
-mathematical tables, unsupported layout formats, and other glyph-indexed
+Compact mode still rejects `VARC`, `BASE`, color, bitmap, mathematical tables,
+unsupported legacy kerning or OpenType Layout formats, and other glyph-indexed
 structures it cannot remap. Private `meta` data is removed because its glyph
-references cannot be remapped safely.
+references cannot be remapped safely. Supporting `vhea`, `vmtx`, and VVAR does
+not imply general vertical-layout support while those companion tables remain
+unsupported.
 
 Always inspect `SubsetResult::$warnings` and validate the final output in the
 environment that will shape and render it.
