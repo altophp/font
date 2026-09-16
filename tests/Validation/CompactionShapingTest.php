@@ -49,6 +49,13 @@ final class CompactionShapingTest extends TestCase
                 $unicodes = UnicodeSet::fromText('arabic' === $scenario
                     ? 'سلام العربية لَا مُحَمَّد بسم الله'
                     : 'नमस्ते हिन्दी क्षि त्रि श्र ज्ञ कि क्र र्क');
+            } elseif (\in_array($scenario, ['cjk', 'recursive'], true)) {
+                $fixture = 'cjk' === $scenario ? 'AltoCorpusCJK' : 'AltoCorpusVariable';
+                self::assertTrue(copy(__DIR__ . '/../Fixtures/Fonts/' . $fixture . '.ttf', $source));
+                $font = Font::fromFile($source);
+                $unicodes = UnicodeSet::fromText('cjk' === $scenario
+                    ? "日本語の組版、「縦書き」。漢字かなカナ がぎぐげごぱぴぷぺぽか\u{3099}"
+                    : "AVATAR To WA office ffi fi fl 0123456789 agijlrs A\u{0301} Á e\u{0308} ë o\u{0302} ô");
             } elseif (\in_array($scenario, ['layout', 'vertical', 'carets', 'variable-carets'], true)) {
                 FontValidationTools::run([
                     FontValidationTools::python(),
@@ -81,6 +88,7 @@ final class CompactionShapingTest extends TestCase
             }
 
             $decodedFiles = [];
+            $originalFiles = [];
 
             foreach ([
                 'ttf' => new SfntWriter(),
@@ -93,6 +101,7 @@ final class CompactionShapingTest extends TestCase
                 // OTS independently decodes each container for HarfBuzz.
                 FontValidationTools::sanitize($output, $decoded);
                 $decodedFiles[] = $decoded;
+                $originalFiles[] = $output;
             }
 
             FontValidationTools::run([
@@ -101,6 +110,8 @@ final class CompactionShapingTest extends TestCase
                 $scenario,
                 $source,
                 ...$decodedFiles,
+                '--original-outputs',
+                ...$originalFiles,
             ]);
 
             if (\in_array($scenario, ['carets', 'variable-carets'], true)) {
@@ -131,6 +142,8 @@ final class CompactionShapingTest extends TestCase
         yield 'Inter glyph remapping and layout' => ['inter'];
         yield 'Noto Naskh Arabic joining and marks' => ['arabic'];
         yield 'Noto Sans Devanagari conjuncts and reordering' => ['devanagari'];
+        yield 'Bounded Japanese horizontal and vertical layout' => ['cjk'];
+        yield 'Recursive production multi-axis variation and marks' => ['recursive'];
         yield 'Contextual substitutions and attachments' => ['layout'];
         yield 'Shared vertical variation data' => ['vertical'];
         yield 'Ligature caret Device adjustments' => ['carets'];

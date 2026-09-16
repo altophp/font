@@ -30,6 +30,13 @@ packages, using Python's standard-library `ctypes` module.
 - Noto Naskh Arabic and Noto Sans Devanagari compact subsets: right-to-left
   joining and marks, conjuncts and vowel reordering. The source must apply
   script substitutions and contain no missing glyphs for the test text.
+- A bounded Japanese sample checks horizontal and vertical layout, kana
+  marks and vertical punctuation. It excludes `BASE` and uses a frozen weight.
+- A bounded production Recursive sample retains all five axes and GSUB
+  feature variations. Checks cover defaults, all-axis extremes, intermediate
+  coordinates and each axis independently, including conditional substitutions
+  and combining marks. FontTools evaluates variable outlines at each tested
+  location; a negative oracle removes `gvar` and must change the result.
 - Legacy kerning and vertical metrics.
 - Two deterministic synthetic fonts with 12,001 glyphs: one forces PairPos
   format 2 row splitting; the other forces format 1 fallback and splitting
@@ -68,8 +75,14 @@ strict on both older and current HarfBuzz versions.
 
 Each generated TTF, WOFF and WOFF2 file must pass OTS. HarfBuzz reads the
 sanitized SFNT output: it need not support webfont containers directly, and
-FontTools is not used to reconstruct transformed WOFF2 metrics. Comparisons
-cover both sides of the glyph-pair split and the last glyph in the font.
+FontTools is not used to reconstruct transformed WOFF2 shaping metrics.
+Separately, direct FontTools decoding compares every emitted outline and its
+flags against the source, including exact cmap associations, before OTS
+normalization. This catches loss of `OVERLAP_SIMPLE`: OTS 9.2.0 preserves that
+flag in TTF input but drops it when decoding WOFF2, even when the WOFF2 bitmap
+is correct. The shaping geometry oracle therefore uses decomposed drawing
+commands; the independent raw-outline check retains the flags comparison.
+Comparisons cover both sides of the glyph-pair split and the last glyph in the font.
 
 Fonts are generated in temporary directories and removed after each test.
 No system fonts or proprietary fixtures are required. Fixture provenance,
@@ -80,3 +93,44 @@ When adding a corpus font, validate the original first. A malformed source
 must not be treated as evidence of a subsetting regression. Select any
 composed and decomposed Unicode forms needed by the source shaper; Unicode
 normalization closure is not part of `UnicodeSet::fromText()`.
+
+## Local rendering and measurements
+
+Generate a browser page, source/compact fonts and a machine-readable report:
+
+```sh
+php tests/Validation/prepare_corpus_smoke.php /tmp/alto-font-browser-smoke
+symfony server:start --dir=/tmp/alto-font-browser-smoke --port=8793 --no-tls --no-workers
+```
+
+Open `http://127.0.0.1:8793/` in Chromium. The page exposes
+`window.smokeResult` and fails explicitly on font loading errors, empty
+rendering, different source/output canvas pixels or inactive variable
+coordinates. It compares CJK, Arabic, Devanagari and three Recursive instances
+across TTF, WOFF and WOFF2. Each canvas contains 16, 32 and 48 pixel rows.
+The reported count is canvas comparisons, not a count of independent fonts.
+This is local loading/rasterization evidence, separate from HarfBuzz shaping
+and vertical-layout checks; it is not yet a cross-browser CI gate.
+
+On Chromium 153/macOS in the local validation run, CJK, Arabic and Devanagari
+source/output canvases were identical. All three compact Recursive containers
+matched one another but differed from their source. At the default instance,
+586 alpha pixels differed only in the 16-pixel row; the 32/48-pixel rows,
+advances and bounds matched. An independently generated FontTools subset
+reproduced the default and intermediate differences exactly. At the tested
+corner, the FontTools and ALTO subset canvases differed in five pixels. These
+observations alone did not establish an ALTO-specific regression. A follow-up
+isolated the same difference by changing only the source font's `post` table
+to format 3, without ALTO or subsetting, and reproduced it directly in CoreText.
+The earlier five-pixel corner discrepancy did not recur in the controlled rerun.
+See [the minimal reproducer and diagnosis](RECURSIVE_RENDERING.md), including
+the named `X` dependency and the limited preserve-ID workaround.
+The smoke report keeps all source/subset differences visible and reports
+`failed`; it does not relax pixel equality or claim identical rasterization.
+
+`manifest.json` records three sequential runs per sample: source loading,
+compaction, writing each container, output sizes and peak PHP process
+allocation. Peak allocation includes the PHP baseline and allocator retention.
+Measurements have no pass/fail thresholds and are not a performance claim for
+complete CJK fonts or all variable fonts. Generated files stay in the selected
+temporary directory.

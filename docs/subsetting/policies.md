@@ -114,3 +114,8 @@ vertical-layout support while those companion tables remain unsupported.
 
 Always inspect `SubsetResult::$warnings` and validate the final output in the
 environment that will shape and render it.
+
+Preserving outlines and positioning does not guarantee identical rasterized
+pixels. In the Recursive/CoreText validation sample, removing `post` glyph
+names changes small-size rendering even when all other font data is retained.
+Removing glyphs used by that renderer can also affect retained glyphs.
