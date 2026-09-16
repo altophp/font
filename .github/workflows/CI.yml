@@ -58,12 +58,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Install OpenType Sanitizer 9.2.0
-        run: 'python -m pip install --only-binary=:all: opentype-sanitizer==9.2.0'
-      - name: Install Brotli CLI
+      - name: Install font validation dependencies
+        run: python -m pip install --only-binary=:all: -r tests/Validation/requirements.txt
+      - name: Install Brotli and HarfBuzz CLIs
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends brotli
+          sudo apt-get install --no-install-recommends brotli libharfbuzz-bin
       - run: composer install --no-interaction --prefer-dist
       - name: Test process-backed WOFF2 paths
         run: vendor/bin/phpunit tests/Compression/BrotliProcessCompressorTest.php tests/Writer/Woff2WriterTest.php

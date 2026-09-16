@@ -1,0 +1,107 @@
+<?php
+
+declare(strict_types=1);
+
+/*
+ * This file is part of the ALTO library.
+ *
+ * © 2026-present Simon André
+ *
+ * For full copyright and license information, please see
+ * the LICENSE file distributed with this source code.
+ */
+
+namespace Alto\Font\Tests\Validation;
+
+use Alto\Font\Compression\BrotliExtensionCompressor;
+use Alto\Font\Font;
+use Alto\Font\Subset\GlyphIdPolicy;
+use Alto\Font\Subset\SubsetOptions;
+use Alto\Font\Subset\UnicodeSet;
+use Alto\Font\Writer\SfntWriter;
+use Alto\Font\Writer\Woff2Writer;
+use Alto\Font\Writer\WoffWriter;
+use PHPUnit\Framework\Attributes\CoversNothing;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\TestCase;
+
+#[CoversNothing]
+final class CompactionShapingTest extends TestCase
+{
+    #[DataProvider('scenarioProvider')]
+    public function testCompactedContainersPreserveShaping(string $scenario): void
+    {
+        $directory = sys_get_temp_dir() . '/alto-font-shaping-' . bin2hex(random_bytes(8));
+        self::assertTrue(mkdir($directory, 0700));
+
+        try {
+            $source = $directory . '/source.ttf';
+
+            if ('inter' === $scenario) {
+                $font = Font::fromFile(__DIR__ . '/../Fixtures/Fonts/Inter-Regular-latin.woff2');
+                new SfntWriter()->write($font, $source);
+                // Select both composed and decomposed forms used by the shaper.
+                $unicodes = UnicodeSet::fromText("AVATAR To WA office ffi fi fl 0123456789 A\u{0301} Á e\u{0308} ë o\u{0302} ô");
+            } else {
+                FontValidationTools::run([
+                    FontValidationTools::python(),
+                    __DIR__ . '/generate_pairpos.py',
+                    $scenario,
+                    $source,
+                ]);
+                $font = Font::fromFile($source);
+                $unicodes = UnicodeSet::fromCss('U+F0001-F2EE0');
+            }
+
+            // Reject malformed fixtures before comparing any generated output.
+            FontValidationTools::sanitize($source, $directory . '/source-sanitized.ttf');
+            $subset = $font->subset(new SubsetOptions($unicodes, glyphIds: GlyphIdPolicy::Compact))->font;
+
+            if ('inter' === $scenario) {
+                self::assertLessThan($font->face()->glyphCount, $subset->face()->glyphCount);
+            } else {
+                // Every synthetic glyph is retained, so glyph IDs can be compared directly.
+                self::assertSame(12001, $subset->face()->glyphCount);
+            }
+
+            $decodedFiles = [];
+
+            foreach ([
+                'ttf' => new SfntWriter(),
+                'woff' => new WoffWriter(),
+                'woff2' => new Woff2Writer(new BrotliExtensionCompressor()),
+            ] as $extension => $writer) {
+                $output = $directory . '/subset.' . $extension;
+                $decoded = $output . '.sanitized.ttf';
+                $writer->write($subset, $output);
+                // OTS independently decodes each container for HarfBuzz.
+                FontValidationTools::sanitize($output, $decoded);
+                $decodedFiles[] = $decoded;
+            }
+
+            FontValidationTools::run([
+                FontValidationTools::python(),
+                __DIR__ . '/compare_shaping.py',
+                $scenario,
+                $source,
+                ...$decodedFiles,
+            ]);
+        } finally {
+            foreach (glob($directory . '/*') ?: [] as $file) {
+                unlink($file);
+            }
+
+            rmdir($directory);
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function scenarioProvider(): iterable
+    {
+        yield 'PairPos class-row splitting' => ['rows'];
+        yield 'PairPos glyph-pair fallback and splitting' => ['fallback'];
+        yield 'Inter glyph remapping and layout' => ['inter'];
+    }
+}

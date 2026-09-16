@@ -69,6 +69,6 @@
         ],
         "sa": "vendor/bin/phpstan analyse --memory-limit=-1",
         "test": "phpunit",
-        "validate-opentype": "phpunit tests/Validation/OpenTypeSanitizerTest.php"
+        "validate-opentype": "phpunit tests/Validation"
     }
 }
