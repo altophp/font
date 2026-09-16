@@ -16,6 +16,8 @@ namespace Alto\Font\OpenType\Table;
 use Alto\Font\Binary\BinaryReader;
 use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\Exception\UnsupportedFontException;
+use Alto\Font\OpenType\Layout\ClassDefinitionTable;
+use Alto\Font\OpenType\Layout\CoverageTable;
 
 /**
  * Builds a conservative glyph substitution graph.
@@ -799,63 +801,7 @@ final readonly class GsubTable
      */
     private static function coverage(BinaryReader $reader, int $subtableOffset, int $coverageOffset): array
     {
-        if (0 === $coverageOffset) {
-            throw new InvalidFontException('GSUB coverage offset must not be NULL.');
-        }
-
-        $offset = $subtableOffset + $coverageOffset;
-        $format = $reader->uint16($offset);
-
-        if (1 === $format) {
-            $glyphCount = $reader->uint16($offset + 2);
-            $glyphs = [];
-
-            for ($index = 0; $index < $glyphCount; ++$index) {
-                $glyphs[] = $reader->uint16($offset + 4 + $index * 2);
-            }
-
-            return $glyphs;
-        }
-
-        if (2 === $format) {
-            $rangeCount = $reader->uint16($offset + 2);
-            $glyphs = [];
-
-            for ($rangeIndex = 0; $rangeIndex < $rangeCount; ++$rangeIndex) {
-                $rangeOffset = $offset + 4 + $rangeIndex * 6;
-                $startGlyphId = $reader->uint16($rangeOffset);
-                $endGlyphId = $reader->uint16($rangeOffset + 2);
-                $startCoverageIndex = $reader->uint16($rangeOffset + 4);
-
-                if ($startGlyphId > $endGlyphId) {
-                    throw new InvalidFontException('GSUB coverage range start must not exceed its end.');
-                }
-
-                for ($glyphId = $startGlyphId; $glyphId <= $endGlyphId; ++$glyphId) {
-                    $coverageIndex = $startCoverageIndex + $glyphId - $startGlyphId;
-
-                    if (isset($glyphs[$coverageIndex])) {
-                        throw new InvalidFontException('GSUB coverage ranges contain duplicate coverage indexes.');
-                    }
-
-                    $glyphs[$coverageIndex] = $glyphId;
-                }
-            }
-
-            if ([] === $glyphs) {
-                return [];
-            }
-
-            ksort($glyphs);
-
-            if (array_keys($glyphs) !== range(0, \count($glyphs) - 1)) {
-                throw new InvalidFontException('GSUB coverage indexes are not contiguous.');
-            }
-
-            return array_values($glyphs);
-        }
-
-        throw new UnsupportedFontException(\sprintf('GSUB coverage uses unsupported format %d.', $format));
+        return CoverageTable::parse($reader, $subtableOffset, $coverageOffset);
     }
 
     /**
@@ -863,51 +809,7 @@ final readonly class GsubTable
      */
     private static function classDefinition(BinaryReader $reader, int $subtableOffset, int $classDefinitionOffset): array
     {
-        if (0 === $classDefinitionOffset) {
-            throw new InvalidFontException('GSUB class-definition offset must not be NULL.');
-        }
-
-        $offset = $subtableOffset + $classDefinitionOffset;
-        $format = $reader->uint16($offset);
-        $classes = [];
-
-        if (1 === $format) {
-            $startGlyphId = $reader->uint16($offset + 2);
-            $glyphCount = $reader->uint16($offset + 4);
-
-            for ($index = 0; $index < $glyphCount; ++$index) {
-                $classes[$startGlyphId + $index] = $reader->uint16($offset + 6 + $index * 2);
-            }
-
-            return $classes;
-        }
-
-        if (2 === $format) {
-            $rangeCount = $reader->uint16($offset + 2);
-
-            for ($rangeIndex = 0; $rangeIndex < $rangeCount; ++$rangeIndex) {
-                $rangeOffset = $offset + 4 + $rangeIndex * 6;
-                $startGlyphId = $reader->uint16($rangeOffset);
-                $endGlyphId = $reader->uint16($rangeOffset + 2);
-                $classId = $reader->uint16($rangeOffset + 4);
-
-                if ($startGlyphId > $endGlyphId) {
-                    throw new InvalidFontException('GSUB class-definition range start must not exceed its end.');
-                }
-
-                for ($glyphId = $startGlyphId; $glyphId <= $endGlyphId; ++$glyphId) {
-                    if (isset($classes[$glyphId])) {
-                        throw new InvalidFontException(\sprintf('GSUB class definition assigns glyph ID %d more than once.', $glyphId));
-                    }
-
-                    $classes[$glyphId] = $classId;
-                }
-            }
-
-            return $classes;
-        }
-
-        throw new UnsupportedFontException(\sprintf('GSUB class definition uses unsupported format %d.', $format));
+        return ClassDefinitionTable::parse($reader, $subtableOffset, $classDefinitionOffset);
     }
 
     /**

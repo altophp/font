@@ -194,6 +194,18 @@ final class GsubCompactorTest extends TestCase
         self::assertSame([3, 4], [$reader->uint16($offset + 6), $reader->uint16($offset + 8)]);
     }
 
+    public function testItRejectsUnorderedCoverageInsteadOfReassigningSubstitutions(): void
+    {
+        $coverage = self::u16(1) . self::u16(2) . self::u16(4) . self::u16(2);
+        $single = self::u16(2) . self::u16(10) . self::u16(2)
+            . self::u16(5) . self::u16(8) . $coverage;
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('strictly increasing');
+
+        GsubCompactor::compact(self::gsub(1, $single), GlyphIdMap::fromRetained(9, [2 => true, 4 => true, 5 => true, 8 => true]));
+    }
+
     public function testItCompactsLigaturesThroughAnExtensionLookup(): void
     {
         $ligature = self::u16(8)
@@ -655,7 +667,7 @@ final class GsubCompactorTest extends TestCase
             self::gsub(1, self::u16(2) . self::u16(8) . self::u16(0) . self::u16(0)
                 . self::u16(2) . self::u16(1) . self::u16(2) . self::u16(1) . self::u16(0)),
             InvalidFontException::class,
-            'coverage range is reversed',
+            'coverage ranges are invalid or overlap',
         ];
         yield 'unsupported multiple format' => [
             self::gsub(2, self::u16(2)),

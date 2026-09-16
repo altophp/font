@@ -60,7 +60,7 @@ final readonly class CoverageTable
             throw new UnsupportedFontException(\sprintf('OpenType coverage format %d is not supported.', $format));
         }
 
-        $glyphsByIndex = [];
+        $glyphs = [];
         $lastEnd = -1;
 
         for ($rangeIndex = 0, $count = $reader->uint16($offset + 2); $rangeIndex < $count; ++$rangeIndex) {
@@ -73,24 +73,22 @@ final readonly class CoverageTable
                 throw new InvalidFontException('OpenType coverage ranges are invalid or overlap.');
             }
 
-            for ($glyphId = $start; $glyphId <= $end; ++$glyphId) {
-                if (isset($glyphsByIndex[$coverageIndex])) {
-                    throw new InvalidFontException('OpenType coverage indexes overlap.');
-                }
+            if ($coverageIndex < \count($glyphs)) {
+                throw new InvalidFontException('OpenType coverage indexes overlap.');
+            }
 
-                $glyphsByIndex[$coverageIndex++] = $glyphId;
+            if ($coverageIndex !== \count($glyphs)) {
+                throw new InvalidFontException('OpenType coverage indexes are not contiguous in glyph order.');
+            }
+
+            for ($glyphId = $start; $glyphId <= $end; ++$glyphId) {
+                $glyphs[] = $glyphId;
             }
 
             $lastEnd = $end;
         }
 
-        ksort($glyphsByIndex, \SORT_NUMERIC);
-
-        if ([] !== $glyphsByIndex && array_keys($glyphsByIndex) !== range(0, \count($glyphsByIndex) - 1)) {
-            throw new InvalidFontException('OpenType coverage indexes are not contiguous.');
-        }
-
-        return array_values($glyphsByIndex);
+        return $glyphs;
     }
 
     /**

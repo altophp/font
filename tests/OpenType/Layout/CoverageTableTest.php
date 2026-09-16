@@ -60,6 +60,17 @@ final class CoverageTableTest extends TestCase
         CoverageTable::parse(new BinaryReader('', 'null coverage'), 0, 0);
     }
 
+    public function testItRejectsCoverageIndexesThatReorderGlyphRanges(): void
+    {
+        $coverage = self::u16(2) . self::u16(2)
+            . self::u16(2) . self::u16(2) . self::u16(1)
+            . self::u16(5) . self::u16(5) . self::u16(0);
+
+        $this->expectException(InvalidFontException::class);
+
+        CoverageTable::parse(new BinaryReader("\0\0" . $coverage, 'reordered indexes'), 0, 2);
+    }
+
     public function testItRejectsUnsupportedFormats(): void
     {
         $this->expectException(UnsupportedFontException::class);

@@ -17,6 +17,7 @@ use Alto\Font\Binary\BinaryReader;
 use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\Exception\UnsupportedFontException;
 use Alto\Font\OpenType\Layout\ClassDefinitionTable;
+use Alto\Font\OpenType\Layout\CoverageTable;
 use Alto\Font\OpenType\Layout\LayoutTableDirectory;
 use Alto\Font\OpenType\Layout\LookupListTable;
 use Alto\Font\OpenType\Layout\LookupTable;
@@ -1462,47 +1463,7 @@ final readonly class GsubCompactor
      */
     private static function coverage(BinaryReader $reader, int $baseOffset, int $relativeOffset): array
     {
-        if (0 === $relativeOffset) {
-            throw new InvalidFontException('GSUB coverage offset must not be NULL.');
-        }
-
-        $offset = $baseOffset + $relativeOffset;
-        $format = $reader->uint16($offset);
-
-        if (1 === $format) {
-            $glyphs = [];
-
-            for ($index = 0, $count = $reader->uint16($offset + 2); $index < $count; ++$index) {
-                $glyphs[] = $reader->uint16($offset + 4 + $index * 2);
-            }
-
-            return $glyphs;
-        }
-
-        if (2 !== $format) {
-            throw new UnsupportedFontException(\sprintf('GSUB coverage format %d is not supported.', $format));
-        }
-
-        $glyphsByIndex = [];
-
-        for ($rangeIndex = 0, $count = $reader->uint16($offset + 2); $rangeIndex < $count; ++$rangeIndex) {
-            $rangeOffset = $offset + 4 + $rangeIndex * 6;
-            $start = $reader->uint16($rangeOffset);
-            $end = $reader->uint16($rangeOffset + 2);
-            $coverageIndex = $reader->uint16($rangeOffset + 4);
-
-            if ($end < $start) {
-                throw new InvalidFontException('GSUB coverage range is reversed.');
-            }
-
-            for ($glyphId = $start; $glyphId <= $end; ++$glyphId) {
-                $glyphsByIndex[$coverageIndex++] = $glyphId;
-            }
-        }
-
-        ksort($glyphsByIndex, \SORT_NUMERIC);
-
-        return array_values($glyphsByIndex);
+        return CoverageTable::parse($reader, $baseOffset, $relativeOffset);
     }
 
     /**
