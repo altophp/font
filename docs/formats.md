@@ -15,6 +15,11 @@ extension.
 | Variable `glyf` fonts | Supported | Includes `fvar`, `avar`, `gvar`, and `HVAR`; compact subsets can remap `VVAR` with `vhea` and `vmtx` |
 | Color glyphs | Not supported | COLR, CPAL, SVG, sbix, CBDT, and CBLC are not rendered |
 
+Container and outline support does not guarantee that every table can be
+rewritten for compact subsetting. See [subset policies](subsetting/policies.md)
+for layout offset limits and the boundaries of variable-font compaction.
+Static variable-font export and axis-range reduction are not supported.
+
 ## Font collections
 
 Select a zero-based face when loading a TrueType or OpenType collection:
