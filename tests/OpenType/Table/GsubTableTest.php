@@ -71,6 +71,18 @@ final class GsubTableTest extends TestCase
         self::assertArrayHasKey(4, $closure);
     }
 
+    public function testItRejectsUnorderedCoverageBeforeComputingClosure(): void
+    {
+        $coverage = self::u16(1) . self::u16(2) . self::u16(2) . self::u16(1);
+        $subtable = self::u16(2) . self::u16(10) . self::u16(2)
+            . self::u16(3) . self::u16(4) . $coverage;
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('strictly increasing');
+
+        GsubTable::parse(new BinaryReader(self::gsub(1, $subtable), 'GSUB'));
+    }
+
     public function testItComputesTransitiveClosureAcrossLookups(): void
     {
         $gsub = self::gsubWithLookups([
@@ -124,10 +136,11 @@ final class GsubTableTest extends TestCase
         self::assertSame([1, 2], array_keys($closure));
     }
 
-    public function testItMatchesClassZeroWithoutExpandingItIntoTheSubset(): void
+    #[DataProvider('classZeroDefinitions')]
+    public function testItMatchesClassZeroWithoutExpandingItIntoTheSubset(string $classes): void
     {
         $gsub = self::gsubWithLookups([
-            self::lookup(5, self::contextFormat2ClassZero(1)),
+            self::lookup(5, self::contextFormat2ClassZero(1, $classes)),
             self::lookup(1, self::singleFormat2(1, 4)),
         ], [0]);
         $closure = GsubTable::parse(new BinaryReader($gsub, 'GSUB'))
@@ -136,6 +149,68 @@ final class GsubTableTest extends TestCase
         sort($glyphs);
 
         self::assertSame([1, 2, 4], $glyphs);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function classZeroDefinitions(): iterable
+    {
+        yield 'implicit zero' => [self::classDefinition([1 => 1])];
+        yield 'explicit format one zero' => [self::u16(1) . self::u16(1) . self::u16(2) . self::u16(1) . self::u16(0)];
+        yield 'explicit format two zero' => [self::classDefinition([1 => 1, 2 => 0])];
+    }
+
+    #[DataProvider('malformedClassDefinitions')]
+    public function testItRejectsMalformedClassDefinitionsBeforeComputingClosure(string $classes, string $message): void
+    {
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage($message);
+
+        $gsub = self::gsubWithLookups([
+            self::lookup(5, self::contextFormat2ClassZero(1, $classes)),
+            self::lookup(1, self::singleFormat2(1, 4)),
+        ], [0]);
+
+        GsubTable::parse(new BinaryReader($gsub, 'GSUB malformed classes'));
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function malformedClassDefinitions(): iterable
+    {
+        yield 'unordered ranges' => [self::classDefinition([2 => 0, 1 => 1]), 'ranges are invalid or overlap'];
+        yield 'overlapping zero ranges' => [
+            self::u16(2) . self::u16(2)
+                . self::u16(1) . self::u16(2) . self::u16(0)
+                . self::u16(2) . self::u16(3) . self::u16(0),
+            'ranges are invalid or overlap',
+        ];
+        yield 'reversed range' => [
+            self::u16(2) . self::u16(1) . self::u16(2) . self::u16(1) . self::u16(0),
+            'ranges are invalid or overlap',
+        ];
+        yield 'format one overflow' => [
+            self::u16(1) . self::u16(0xFFFF) . self::u16(2) . self::u16(1) . self::u16(2),
+            'exceeds the glyph ID range',
+        ];
+        yield 'format one zero overflow' => [
+            self::u16(1) . self::u16(0xFFFF) . self::u16(2) . self::u16(0) . self::u16(0),
+            'exceeds the glyph ID range',
+        ];
+    }
+
+    public function testItAcceptsNullClassDefinitionsForEmptyChainedContexts(): void
+    {
+        $gsub = self::gsubWithLookups([
+            self::lookup(6, self::chainedContextFormat2WithoutSideContexts(1)),
+            self::lookup(1, self::singleFormat2(1, 4)),
+        ], [0]);
+        $closure = GsubTable::parse(new BinaryReader($gsub, 'GSUB NULL chained classes'))
+            ->glyphClosure([1 => true], 6);
+
+        self::assertSame([1, 4], array_keys($closure));
     }
 
     public function testVersionOnePointOneFeatureVariationsConservativelyRootEveryLookup(): void
@@ -219,7 +294,7 @@ final class GsubTableTest extends TestCase
             . $coverage;
 
         $this->expectException(InvalidFontException::class);
-        $this->expectExceptionMessage('coverage range start must not exceed its end');
+        $this->expectExceptionMessage('coverage ranges are invalid or overlap');
 
         GsubTable::parse(new BinaryReader(self::gsub(1, $single), 'GSUB'));
     }
@@ -240,17 +315,55 @@ final class GsubTableTest extends TestCase
         GsubTable::parse(new BinaryReader(self::gsub(5, self::contextFormat3(1, 2, 2, 0)), 'GSUB'));
     }
 
-    public function testItFailsClosedWhenAContextualRuleReferencesAnotherContextualLookup(): void
+    public function testItFollowsNestedContextualLookups(): void
     {
         $gsub = self::gsubWithLookups([
-            self::lookup(5, self::contextFormat3(1, 2)),
-            self::lookup(5, self::contextFormat3WithoutRecords(1)),
+            self::lookup(5, self::contextFormat3(1, 2, 0, 1)),
+            self::lookup(5, self::contextFormat3(1, 3, 0, 2)),
+            self::lookup(1, self::singleFormat2(1, 4)),
         ], [0]);
+        $closure = GsubTable::parse(new BinaryReader($gsub, 'GSUB nested contexts'))
+            ->glyphClosure([1 => true, 2 => true, 3 => true], 5);
 
-        $this->expectException(UnsupportedFontException::class);
-        $this->expectExceptionMessage('references contextual lookup index 1');
+        self::assertSame([1, 2, 3, 4], array_keys($closure));
+    }
 
-        GsubTable::parse(new BinaryReader($gsub, 'GSUB'));
+    public function testItDoesNotActivateANestedContextualLookupUntilItsParentMatches(): void
+    {
+        $gsub = self::gsubWithLookups([
+            self::lookup(5, self::contextFormat3(1, 2, 0, 1)),
+            self::lookup(5, self::contextFormat3(1, 3, 0, 2)),
+            self::lookup(1, self::singleFormat2(1, 4)),
+        ], [0]);
+        $closure = GsubTable::parse(new BinaryReader($gsub, 'GSUB inactive nested context'))
+            ->glyphClosure([1 => true, 3 => true], 5);
+
+        self::assertSame([1, 3], array_keys($closure));
+    }
+
+    public function testItTerminatesContextualLookupCycles(): void
+    {
+        $gsub = self::gsubWithLookups([
+            self::lookup(5, self::contextFormat3SingleRecord(1, 1)),
+            self::lookup(5, self::contextFormat3SingleRecord(1, 0)),
+        ], [0]);
+        $closure = GsubTable::parse(new BinaryReader($gsub, 'GSUB contextual cycle'))
+            ->glyphClosure([1 => true], 2);
+
+        self::assertSame([1], array_keys($closure));
+    }
+
+    public function testActivatedLookupsApplyToGlyphsProducedByEarlierRecords(): void
+    {
+        $gsub = self::gsubWithLookups([
+            self::lookup(5, self::contextFormat3WithTwoRecords(1, 2, 1, 2)),
+            self::lookup(1, self::singleFormat2(1, 3)),
+            self::lookup(1, self::singleFormat2(3, 4)),
+        ], [0]);
+        $closure = GsubTable::parse(new BinaryReader($gsub, 'GSUB sequential context records'))
+            ->glyphClosure([1 => true, 2 => true], 5);
+
+        self::assertSame([1, 2, 3, 4], array_keys($closure));
     }
 
     public function testItFailsClosedForUnsupportedContextualFormats(): void
@@ -408,12 +521,12 @@ final class GsubTableTest extends TestCase
         yield 'unsupported coverage' => [
             self::gsub(1, self::u16(2) . self::u16(8) . self::u16(0) . self::u16(0) . self::u16(3)),
             UnsupportedFontException::class,
-            'coverage uses unsupported format 3',
+            'coverage format 3 is not supported',
         ];
         yield 'duplicate coverage indexes' => [
             self::gsub(1, self::singleWithCoverage(self::rangeCoverage(0, 0))),
             InvalidFontException::class,
-            'duplicate coverage indexes',
+            'coverage indexes overlap',
         ];
         yield 'non-contiguous coverage indexes' => [
             self::gsub(1, self::singleWithCoverage(self::rangeCoverage(1))),
@@ -428,12 +541,12 @@ final class GsubTableTest extends TestCase
         yield 'NULL class definition' => [
             self::gsub(5, self::u16(2) . self::u16(12) . str_repeat("\0", 8) . self::coverage(1)),
             InvalidFontException::class,
-            'class-definition offset must not be NULL',
+            'class definition offset must not be NULL',
         ];
         yield 'unsupported class definition' => [
             self::gsub(5, self::u16(2) . self::u16(14) . self::u16(12) . str_repeat("\0", 6) . self::u16(3) . self::coverage(1)),
             UnsupportedFontException::class,
-            'class definition uses unsupported format 3',
+            'class definition format 3 is not supported',
         ];
     }
 
@@ -629,14 +742,13 @@ final class GsubTableTest extends TestCase
             . self::coverage($firstGlyphId);
     }
 
-    private static function contextFormat2ClassZero(int $firstGlyphId): string
+    private static function contextFormat2ClassZero(int $firstGlyphId, string $classDefinition): string
     {
         $rule = self::u16(2)
             . self::u16(1)
             . self::u16(0)
             . self::lookupRecord(0, 1);
         $set = self::u16(1) . self::u16(4) . $rule;
-        $classDefinition = self::classDefinition([$firstGlyphId => 1]);
         $headerLength = 12;
 
         return self::u16(2)
@@ -705,13 +817,35 @@ final class GsubTableTest extends TestCase
             . $secondCoverage;
     }
 
-    private static function contextFormat3WithoutRecords(int $glyphId): string
+    private static function contextFormat3SingleRecord(int $glyphId, int $lookupIndex): string
     {
         return self::u16(3)
             . self::u16(1)
-            . self::u16(0)
-            . self::u16(8)
+            . self::u16(1)
+            . self::u16(12)
+            . self::lookupRecord(0, $lookupIndex)
             . self::coverage($glyphId);
+    }
+
+    private static function contextFormat3WithTwoRecords(
+        int $firstGlyphId,
+        int $secondGlyphId,
+        int $firstLookupIndex,
+        int $secondLookupIndex,
+    ): string {
+        $firstCoverage = self::coverage($firstGlyphId);
+        $secondCoverage = self::coverage($secondGlyphId);
+        $headerLength = 18;
+
+        return self::u16(3)
+            . self::u16(2)
+            . self::u16(2)
+            . self::u16($headerLength)
+            . self::u16($headerLength + \strlen($firstCoverage))
+            . self::lookupRecord(0, $firstLookupIndex)
+            . self::lookupRecord(0, $secondLookupIndex)
+            . $firstCoverage
+            . $secondCoverage;
     }
 
     private static function chainedContextFormat1(int $backtrackGlyphId, int $inputGlyphId, int $lookaheadGlyphId): string
@@ -764,6 +898,32 @@ final class GsubTableTest extends TestCase
             . $backtrackClasses
             . $inputClasses
             . $lookaheadClasses
+            . self::coverage($inputGlyphId);
+    }
+
+    private static function chainedContextFormat2WithoutSideContexts(int $inputGlyphId): string
+    {
+        $rule = self::u16(0)
+            . self::u16(1)
+            . self::u16(0)
+            . self::u16(1)
+            . self::lookupRecord(0, 1);
+        $set = self::u16(1) . self::u16(4) . $rule;
+        $inputClasses = self::classDefinition([$inputGlyphId => 1]);
+        $headerLength = 16;
+        $inputOffset = $headerLength + \strlen($set);
+        $coverageOffset = $inputOffset + \strlen($inputClasses);
+
+        return self::u16(2)
+            . self::u16($coverageOffset)
+            . self::u16(0)
+            . self::u16($inputOffset)
+            . self::u16(0)
+            . self::u16(2)
+            . self::u16(0)
+            . self::u16($headerLength)
+            . $set
+            . $inputClasses
             . self::coverage($inputGlyphId);
     }
 

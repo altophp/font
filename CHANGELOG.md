@@ -2,8 +2,14 @@
 
 ## [Unreleased]
 
+- Reduce and split oversized GPOS PairPos class matrices, with a glyph-pair
+  fallback for rows that cannot fit internal 16-bit offsets.
 - Compact legacy `kern` format 0 pairs and vertical `vhea`, `vmtx`, and VVAR
   mappings when glyph IDs are renumbered.
+- Compact every standard GSUB and GPOS lookup type, including contextual,
+  chained, mark, cursive, alternate, reverse-chaining, and extension lookups.
+- Preserve OpenType Layout 1.1 feature variations and relocate Device and
+  VariationIndex data referenced by positioning records.
 - Add documentation.
 - Write supported faces as standalone SFNT, WOFF, and WOFF2 files.
 - Create conservative Unicode subsets with optional glyph compaction, layout

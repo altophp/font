@@ -41,6 +41,11 @@ final readonly class ClassDefinitionTable
         if (1 === $format) {
             $startGlyphId = $reader->uint16($offset + 2);
             $glyphCount = $reader->uint16($offset + 4);
+
+            if ($startGlyphId + $glyphCount > 0x10000) {
+                throw new InvalidFontException('OpenType class definition exceeds the glyph ID range.');
+            }
+
             $classes = [];
 
             for ($index = 0; $index < $glyphCount; ++$index) {

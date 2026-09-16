@@ -18,6 +18,7 @@ use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\Exception\UnsupportedFontException;
 use Alto\Font\OpenType\Layout\ClassDefinitionTable;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 #[CoversClass(ClassDefinitionTable::class)]
@@ -43,6 +44,38 @@ final class ClassDefinitionTableTest extends TestCase
             [2 => 1, 3 => 1, 7 => 3],
             ClassDefinitionTable::parse(new BinaryReader("\0\0" . $classes, 'built classes'), 0, 2),
         );
+    }
+
+    public function testItAcceptsFormatOneAtTheGlyphIdBoundary(): void
+    {
+        $classes = self::u16(1) . self::u16(0xFFFE) . self::u16(2)
+            . self::u16(0) . self::u16(3);
+
+        self::assertSame(
+            [0xFFFF => 3],
+            ClassDefinitionTable::parse(new BinaryReader("\0\0" . $classes, 'boundary classes'), 0, 2),
+        );
+    }
+
+    #[DataProvider('overflowingClasses')]
+    public function testItRejectsFormatOneBeyondTheGlyphIdBoundary(int $lastClass): void
+    {
+        $classes = self::u16(1) . self::u16(0xFFFF) . self::u16(2)
+            . self::u16(1) . self::u16($lastClass);
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('exceeds the glyph ID range');
+
+        ClassDefinitionTable::parse(new BinaryReader("\0\0" . $classes, 'overflowing classes'), 0, 2);
+    }
+
+    /**
+     * @return iterable<string, array{int}>
+     */
+    public static function overflowingClasses(): iterable
+    {
+        yield 'nonzero class' => [2];
+        yield 'class zero' => [0];
     }
 
     public function testItRejectsNullOffsets(): void

@@ -205,6 +205,10 @@ composer qa
 
 Changes to public behavior should include tests and documentation.
 
+For changes to font output or subsetting, also run the independent
+[sanitizer and shaping checks](tests/Validation/README.md) with
+`composer validate-opentype`.
+
 ## Support
 
 ALTO Font is open source. You can support its continued development through
