@@ -82,8 +82,7 @@ normalization. This catches loss of `OVERLAP_SIMPLE`: OTS 9.2.0 preserves that
 flag in TTF input but drops it when decoding WOFF2, even when the WOFF2 bitmap
 is correct. The shaping geometry oracle therefore uses decomposed drawing
 commands; the independent raw-outline check retains the flags comparison.
-Comparisons
-cover both sides of the glyph-pair split and the last glyph in the font.
+Comparisons cover both sides of the glyph-pair split and the last glyph in the font.
 
 Fonts are generated in temporary directories and removed after each test.
 No system fonts or proprietary fixtures are required. Fixture provenance,
@@ -101,7 +100,7 @@ Generate a browser page, source/compact fonts and a machine-readable report:
 
 ```sh
 php tests/Validation/prepare_corpus_smoke.php /tmp/alto-font-browser-smoke
-python3 -m http.server 8793 --bind 127.0.0.1 --directory /tmp/alto-font-browser-smoke
+symfony server:start --dir=/tmp/alto-font-browser-smoke --port=8793 --no-tls --no-workers
 ```
 
 Open `http://127.0.0.1:8793/` in Chromium. The page exposes
@@ -120,10 +119,14 @@ matched one another but differed from their source. At the default instance,
 advances and bounds matched. An independently generated FontTools subset
 reproduced the default and intermediate differences exactly. At the tested
 corner, the FontTools and ALTO subset canvases differed in five pixels. These
-observations do not establish an ALTO-specific regression or explain the
-rasterizer's internal behavior. The smoke report keeps all differences visible
-and reports `failed`; it does not relax pixel equality or claim identical rasterization.
-The internal rasterizer cause has not been established.
+observations alone did not establish an ALTO-specific regression. A follow-up
+isolated the same difference by changing only the source font's `post` table
+to format 3, without ALTO or subsetting, and reproduced it directly in CoreText.
+The earlier five-pixel corner discrepancy did not recur in the controlled rerun.
+See [the minimal reproducer and diagnosis](RECURSIVE_RENDERING.md), including
+the named `X` dependency and the limited preserve-ID workaround.
+The smoke report keeps all source/subset differences visible and reports
+`failed`; it does not relax pixel equality or claim identical rasterization.
 
 `manifest.json` records three sequential runs per sample: source loading,
 compaction, writing each container, output sizes and peak PHP process

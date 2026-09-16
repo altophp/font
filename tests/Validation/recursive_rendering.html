@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recursive glyph-name rendering reproducer</title>
+<link rel="icon" href="data:,">
+<style>
+body{margin:2rem;font:16px system-ui;background:#faf9f6;color:#202020}
+p{max-width:75ch;line-height:1.5}canvas{display:block;max-width:100%;background:white}
+pre{white-space:pre-wrap}section{margin-block:2rem}
+</style>
+<h1>Recursive glyph-name rendering reproducer</h1>
+<p>These fonts have identical outlines, variation data, mappings and metrics.
+The second font replaces only the post table with format 3, removing glyph names.
+No ALTO code or subsetting is involved. Each canvas contains 16, 32 and 48 pixel rows.</p>
+<p id="status">Running</p><main id="samples"></main><pre id="report"></pre>
+<script>
+window.reproductionResult = {state: 'running'};
+(async () => {
+  const texts = ['A', 'AVATAR office ffi agijlrs A\u0301 Á e\u0308 ë'];
+  const locations = ['', '"MONO" 1, "CASL" 1, "wght" 1000, "slnt" -15, "CRSV" 1',
+    '"MONO" 0.5, "CASL" 0.5, "wght" 650, "slnt" -7.5, "CRSV" 0.5'];
+  const cases = [];
+  const sourceDigests = [];
+  for (const [locationIndex, location] of locations.entries()) {
+    const families = [];
+    for (const name of ['source', 'post3']) {
+      const family = `reproduce_${name}_${locationIndex}`;
+      const face = new FontFace(family, `url(${name}.ttf)`, location ? {variationSettings: location} : {});
+      await face.load(); document.fonts.add(face); families.push(family);
+    }
+    for (const text of texts) {
+      const section = document.createElement('section');
+      const heading = document.createElement('h2');
+      heading.textContent = `${JSON.stringify(text)} / ${location || 'default'}`;
+      section.append(heading); document.querySelector('#samples').append(section);
+      const images = [];
+      for (const [index, family] of families.entries()) {
+        const label = document.createElement('p'); label.textContent = index ? 'post format 3' : 'source';
+        const canvas = document.createElement('canvas'); canvas.width = 1100; canvas.height = 190;
+        const context = canvas.getContext('2d', {willReadFrequently: true});
+        const rows = [];
+        for (const [row, size] of [16, 32, 48].entries()) {
+          context.font = `${size}px "${family}"`;
+          context.fillText(text, 10, 35 + row * 65);
+          const pixels = context.getImageData(0, row * 65, 1100, 60).data;
+          if (!pixels.some((value, offset) => offset % 4 === 3 && value > 0))
+            throw new Error(`Empty rendering: ${family}`);
+          rows.push({pixels, width: context.measureText(text).width});
+        }
+        if (index === 0 && text === texts[1]) {
+          const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
+          const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', data));
+          sourceDigests.push(Array.from(digest).join(','));
+        }
+        images.push(rows); section.append(label, canvas);
+      }
+      for (const [row, size] of [16, 32, 48].entries()) {
+        const before = images[0][row], after = images[1][row];
+        let changedPixels = 0, maxChannelDelta = 0;
+        for (let pixel = 0; pixel < before.pixels.length; pixel += 4) {
+          let changed = false;
+          for (let channel = 0; channel < 4; channel++) {
+            const delta = Math.abs(before.pixels[pixel + channel] - after.pixels[pixel + channel]);
+            changed ||= delta !== 0; maxChannelDelta = Math.max(maxChannelDelta, delta);
+          }
+          if (changed) changedPixels++;
+        }
+        cases.push({text, location: location || 'default', size, changedPixels,
+          maxChannelDelta, widths: [before.width, after.width]});
+      }
+    }
+  }
+  if (new Set(sourceDigests).size !== locations.length)
+    throw new Error('Source variation locations did not produce distinct renderings');
+  window.reproductionResult = {state: 'completed', browser: navigator.userAgent,
+    differenceObserved: cases.some(item => item.changedPixels > 0), cases};
+  document.querySelector('#status').textContent = window.reproductionResult.differenceObserved
+    ? 'Pixel differences reproduced; see exact counts below.' : 'No pixel differences observed in this browser.';
+  document.querySelector('#report').textContent = JSON.stringify(window.reproductionResult, null, 2);
+})().catch(error => {
+  window.reproductionResult = {state: 'failed', error: String(error)};
+  document.querySelector('#status').textContent = String(error);
+});
+</script>
+</html>
