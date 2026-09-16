@@ -21,6 +21,7 @@ use Alto\Font\OpenType\GlyphIdMap;
 use Alto\Font\OpenType\Layout\ClassDefinitionTable;
 use Alto\Font\OpenType\Layout\CoverageTable;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 #[CoversClass(GdefCompactor::class)]
@@ -83,7 +84,7 @@ final class GdefCompactorTest extends TestCase
 
     public function testItPreservesAFinalItemVariationStore(): void
     {
-        $store = "variation store";
+        $store = self::variationStore();
         $gdef = self::u16(1) . self::u16(3)
             . str_repeat("\0", 10)
             . self::u32(18)
@@ -113,41 +114,107 @@ final class GdefCompactorTest extends TestCase
         GdefCompactor::compact($gdef, GlyphIdMap::fromRetained(3, [2 => true]));
     }
 
-    public function testItFailsClosedForCaretDeviceOffsets(): void
+    #[DataProvider('caretAdjustments')]
+    public function testItRelocatesCaretAdjustments(string $device): void
     {
-        $emptyClasses = ClassDefinitionTable::build([]);
+        // Padding forces relocation; dropping glyph 2 also renumbers the ligature.
+        $caret = self::u16(3) . self::i16(-300) . self::u16(12) . str_repeat("\0", 6) . $device;
         $ligatureCarets = self::coverageRecordList(
-            [5],
-            [self::offsetList([self::u16(3) . self::i16(300) . self::u16(6)])],
+            [2, 5],
+            [self::offsetList([self::u16(1) . self::i16(100)]), self::offsetList([$caret])],
         );
-        $gdef = self::gdef12(
-            $emptyClasses,
-            self::coverageRecordList([], []),
-            $ligatureCarets,
-            $emptyClasses,
-            self::markGlyphSets([]),
+        $reader = new BinaryReader(
+            GdefCompactor::compact(self::gdefWith(ligatureCarets: $ligatureCarets), GlyphIdMap::fromRetained(6, [5 => true])),
+            'GDEF caret adjustments',
         );
+        $list = $reader->uint16(8);
+        self::assertSame([1], CoverageTable::parse($reader, $list, $reader->uint16($list)));
+        $ligature = $list + $reader->uint16($list + 4);
+        $outputCaret = $ligature + $reader->uint16($ligature + 2);
 
-        $this->expectException(UnsupportedFontException::class);
-        $this->expectExceptionMessage('does not support caret device offsets yet');
-
-        GdefCompactor::compact($gdef, GlyphIdMap::fromRetained(6, [5 => true]));
+        self::assertSame(3, $reader->uint16($outputCaret));
+        self::assertSame(-300, $reader->int16($outputCaret + 2));
+        self::assertSame(6, $reader->uint16($outputCaret + 4));
+        self::assertSame($device, $reader->string($outputCaret + 6, \strlen($device)));
     }
 
-    public function testItRequiresTheItemVariationStoreAfterEveryTopLevelSubtable(): void
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function caretAdjustments(): iterable
+    {
+        yield 'two-bit deltas' => [pack('n*', 10, 18, 1, 0x4000, 0xC000)];
+        yield 'four-bit deltas' => [pack('n*', 10, 14, 2, 0x1234, 0xF000)];
+        yield 'eight-bit deltas' => [pack('n*', 10, 12, 3, 0x01FF, 0x0200)];
+        yield 'variation index' => [pack('n*', 2, 1, 0x8000)];
+    }
+
+    public function testItPreservesACaretWithNoAdjustment(): void
+    {
+        $caret = pack('n*', 3, 300, 0);
+        $ligatures = self::coverageRecordList([2], [self::offsetList([$caret])]);
+        $reader = new BinaryReader(
+            GdefCompactor::compact(self::gdefWith(ligatureCarets: $ligatures), GlyphIdMap::fromRetained(3, [2 => true])),
+            'GDEF no adjustment',
+        );
+        $list = $reader->uint16(8);
+        $ligature = $list + $reader->uint16($list + 4);
+        $offset = $ligature + $reader->uint16($ligature + 2);
+        self::assertSame($caret, $reader->string($offset, 6));
+    }
+
+    public function testItRejectsTruncatedCaretAdjustments(): void
+    {
+        $caret = pack('n*', 3, 300, 0xFFFF);
+        $ligatures = self::coverageRecordList([2], [self::offsetList([$caret])]);
+        $this->expectException(InvalidFontException::class);
+
+        GdefCompactor::compact(self::gdefWith(ligatureCarets: $ligatures), GlyphIdMap::fromRetained(3, [2 => true]));
+    }
+
+    public function testItRelocatesAnItemVariationStoreBeforeOtherSubtables(): void
     {
         $glyphClasses = ClassDefinitionTable::build([1 => 1]);
+        $store = self::variationStore();
         $gdef = self::u16(1) . self::u16(3)
-            . self::u16(18)
+            . self::u16(18 + \strlen($store))
             . str_repeat("\0", 8)
             . self::u32(18)
-            . $glyphClasses
-            . 'variation store';
+            . $store . $glyphClasses;
+        $reader = new BinaryReader(GdefCompactor::compact($gdef, GlyphIdMap::fromRetained(2, [1 => true])), 'reordered GDEF');
 
-        $this->expectException(UnsupportedFontException::class);
-        $this->expectExceptionMessage('ItemVariationStore to be the final top-level subtable');
+        self::assertSame([1 => 1], ClassDefinitionTable::parse($reader, 0, $reader->uint16(4)));
+        self::assertSame($store, $reader->string($reader->uint32(14), \strlen($store)));
+        self::assertSame(18 + \strlen($glyphClasses) + \strlen($store), $reader->length());
+    }
+
+    public function testItRejectsAnItemVariationStoreOverlappingAnotherSubtable(): void
+    {
+        $gdef = self::u16(1) . self::u16(3) . self::u16(18)
+            . str_repeat("\0", 8) . self::u32(18) . self::variationStore();
+        $this->expectException(InvalidFontException::class);
 
         GdefCompactor::compact($gdef, GlyphIdMap::fromRetained(2, [1 => true]));
+    }
+
+    public function testItRejectsAClassDefinitionExtendingIntoTheVariationStore(): void
+    {
+        $gdef = pack('n*', 1, 3, 18, 0, 0, 0, 0) . pack('N', 24)
+            . pack('n*', 1, 0, 2) . self::variationStore();
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('overlaps another subtable');
+
+        GdefCompactor::compact($gdef, GlyphIdMap::fromRetained(2, [1 => true]));
+    }
+
+    public function testItRejectsInvalidCaretAdjustmentOffsets(): void
+    {
+        $caret = pack('n*', 3, 300, 2);
+        $ligatures = self::coverageRecordList([2], [self::offsetList([$caret])]);
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('overlaps the caret value');
+
+        GdefCompactor::compact(self::gdefWith(ligatureCarets: $ligatures), GlyphIdMap::fromRetained(3, [2 => true]));
     }
 
     public function testItRejectsUnsupportedVersions(): void
@@ -328,6 +395,11 @@ final class GdefCompactorTest extends TestCase
     private static function i16(int $value): string
     {
         return pack('n', $value & 0xFFFF);
+    }
+
+    private static function variationStore(): string
+    {
+        return self::u16(1) . self::u32(8) . self::u16(0) . self::u16(0) . self::u16(0);
     }
 
     private static function u16(int $value): string

@@ -18,6 +18,8 @@ use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\Exception\UnsupportedFontException;
 use Alto\Font\OpenType\Layout\ClassDefinitionTable;
 use Alto\Font\OpenType\Layout\CoverageTable;
+use Alto\Font\OpenType\Layout\DeviceTable;
+use Alto\Font\OpenType\Layout\ItemVariationStoreTable;
 
 /**
  * Remaps supported GDEF structures to compact glyph identifiers.
@@ -39,47 +41,46 @@ final readonly class GdefCompactor
         }
 
         $itemVariationStoreOffset = 3 === $minorVersion ? $reader->uint32(14) : 0;
+        $headerLength = match ($minorVersion) {
+            0 => 12,
+            2 => 14,
+            3 => 18,
+        };
+        $itemVariationStore = null;
+        $storeRanges = [];
+
+        if (0 !== $itemVariationStoreOffset) {
+            if ($itemVariationStoreOffset < $headerLength) {
+                throw new InvalidFontException('GDEF ItemVariationStore overlaps the table header.');
+            }
+
+            $store = ItemVariationStoreTable::parse($reader, $itemVariationStoreOffset);
+
+            foreach ([4, 6, 8, 10, 12] as $field) {
+                $subtableOffset = $reader->uint16($field);
+
+                foreach ($store['ranges'] as [$start, $end]) {
+                    if ($subtableOffset >= $start && $subtableOffset < $end) {
+                        throw new InvalidFontException('GDEF ItemVariationStore overlaps another subtable.');
+                    }
+                }
+            }
+
+            $itemVariationStore = $store['data'];
+            $storeRanges = $store['ranges'];
+        }
 
         $subtables = [
-            self::compactClassDefinition($reader, $reader->uint16(4), $glyphIds),
+            self::compactClassDefinition($reader, $reader->uint16(4), $glyphIds, $storeRanges),
             self::compactAttachList($reader, $reader->uint16(6), $glyphIds),
             self::compactLigatureCaretList($reader, $reader->uint16(8), $glyphIds),
-            self::compactClassDefinition($reader, $reader->uint16(10), $glyphIds),
+            self::compactClassDefinition($reader, $reader->uint16(10), $glyphIds, $storeRanges),
         ];
 
         if ($minorVersion >= 2) {
             $subtables[] = self::compactMarkGlyphSets($reader, $reader->uint16(12), $glyphIds);
         }
 
-        $itemVariationStore = null;
-
-        if (0 !== $itemVariationStoreOffset) {
-            $topLevelOffsets = [
-                $reader->uint16(4),
-                $reader->uint16(6),
-                $reader->uint16(8),
-                $reader->uint16(10),
-                $reader->uint16(12),
-            ];
-
-            if ($itemVariationStoreOffset < 18
-                || $itemVariationStoreOffset <= max($topLevelOffsets)
-                || $itemVariationStoreOffset >= $reader->length()
-            ) {
-                throw new UnsupportedFontException('Compact GDEF output requires the ItemVariationStore to be the final top-level subtable.');
-            }
-
-            $itemVariationStore = $reader->string(
-                $itemVariationStoreOffset,
-                $reader->length() - $itemVariationStoreOffset,
-            );
-        }
-
-        $headerLength = match ($minorVersion) {
-            0 => 12,
-            2 => 14,
-            3 => 18,
-        };
         $header = self::uint16(1) . self::uint16($minorVersion);
         $data = '';
         $cursor = $headerLength;
@@ -102,16 +103,32 @@ final readonly class GdefCompactor
         return $header . $data . ($itemVariationStore ?? '');
     }
 
+    /**
+     * @param list<array{int, int}> $storeRanges
+     */
     private static function compactClassDefinition(
         BinaryReader $reader,
         int $offset,
         GlyphIdMap $glyphIds,
+        array $storeRanges,
     ): ?string {
         if (0 === $offset) {
             return null;
         }
 
         $classes = ClassDefinitionTable::parse($reader, 0, $offset);
+        // Class definitions have inline entries, so their complete source span
+        // matters even when their start precedes the variation store.
+        $length = 1 === $reader->uint16($offset)
+            ? 6 + $reader->uint16($offset + 4) * 2
+            : 4 + $reader->uint16($offset + 2) * 6;
+
+        foreach ($storeRanges as [$start, $end]) {
+            if ($offset < $end && $offset + $length > $start) {
+                throw new InvalidFontException('GDEF ItemVariationStore overlaps another subtable.');
+            }
+        }
+
         $remapped = [];
 
         foreach ($glyphIds->pairs() as $oldGlyphId => $newGlyphId) {
@@ -221,12 +238,32 @@ final readonly class GdefCompactor
 
             $carets[] = match ($format) {
                 1, 2 => $reader->string($caret, 4),
-                3 => throw new UnsupportedFontException('Compact GDEF output does not support caret device offsets yet.'),
+                3 => self::compactAdjustedCaret($reader, $caret),
                 default => throw new InvalidFontException(\sprintf('GDEF caret value format %d is invalid.', $format)),
             };
         }
 
         return self::offsetList($carets);
+    }
+
+    private static function compactAdjustedCaret(BinaryReader $reader, int $offset): string
+    {
+        $caret = $reader->string($offset, 6);
+        $deviceOffset = $reader->uint16($offset + 4);
+
+        if (0 === $deviceOffset) {
+            return $caret;
+        }
+
+        if ($deviceOffset < 6) {
+            throw new InvalidFontException('GDEF caret adjustment overlaps the caret value.');
+        }
+
+        return DeviceTable::append($caret, [[
+            'offset' => 4,
+            'base' => 0,
+            'data' => DeviceTable::copy($reader, $offset + $deviceOffset),
+        ]]);
     }
 
     private static function compactMarkGlyphSets(
