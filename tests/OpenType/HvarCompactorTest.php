@@ -23,6 +23,7 @@ use Alto\Font\Tests\Fixtures\TinyTrueTypeFont;
 use Alto\Font\Variation\NormalizedCoordinates;
 use Alto\Font\Variation\Table\HvarTable;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 #[CoversClass(HvarCompactor::class)]
@@ -93,12 +94,77 @@ final class HvarCompactorTest extends TestCase
         HvarCompactor::compact($hvar, GlyphIdMap::fromRetained(5, [1 => true]));
     }
 
-    public function testItRejectsMappingsBeforeTheVariationStore(): void
+    #[DataProvider('mappingPlacements')]
+    public function testItAcceptsMappingsBeforeAndInsideVariationStoreGaps(bool $inside): void
     {
-        $hvar = substr_replace(self::hvar(), self::u32(20), 8, 4);
+        $source = self::hvar();
+        $reader = new BinaryReader($source, 'source HVAR');
+        $mapStart = $reader->uint32(8);
+        $maps = substr($source, $mapStart);
+        $store = substr($source, 20, $mapStart - 20);
+        $storeReader = new BinaryReader($store, 'source store');
+        $insert = $inside ? 12 : 0;
 
-        $this->expectException(UnsupportedFontException::class);
-        $this->expectExceptionMessage('requires mappings after the ItemVariationStore');
+        if ($inside) {
+            $store = substr_replace($store, self::u32($storeReader->uint32(2) + \strlen($maps)), 2, 4);
+            $store = substr_replace($store, self::u32($storeReader->uint32(8) + \strlen($maps)), 8, 4);
+        }
+
+        $header = self::u16(1) . self::u16(0) . self::u32($inside ? 20 : 20 + \strlen($maps));
+
+        foreach ([8, 12, 16] as $field) {
+            $header .= self::u32(20 + $insert + $reader->uint32($field) - $mapStart);
+        }
+
+        $reordered = $header . substr($store, 0, $insert) . $maps . substr($store, $insert) . 'unrelated';
+        $glyphIds = GlyphIdMap::fromRetained(5, [4 => true]);
+
+        self::assertSame(HvarCompactor::compact($source, $glyphIds), HvarCompactor::compact($reordered, $glyphIds));
+    }
+
+    /**
+     * @return iterable<string, array{bool}>
+     */
+    public static function mappingPlacements(): iterable
+    {
+        yield 'before store' => [false];
+        yield 'inside store gaps' => [true];
+    }
+
+    public function testItRemapsSharedMappings(): void
+    {
+        $source = self::hvar();
+        $shared = substr_replace($source, substr($source, 12, 4), 16, 4);
+        $glyphIds = GlyphIdMap::fromRetained(5, [4 => true]);
+
+        self::assertSame(HvarCompactor::compact($source, $glyphIds), HvarCompactor::compact($shared, $glyphIds));
+    }
+
+    public function testItRejectsOverlappingMappings(): void
+    {
+        $hvar = self::hvar();
+        $offset = \strlen($hvar);
+        $hvar .= "\0\0\0\x08\0\0\0\x01\0\0\0\0";
+        $hvar = substr_replace($hvar, self::u32($offset), 8, 4);
+        $hvar = substr_replace($hvar, self::u32($offset + 4), 12, 4);
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('delta-set mappings overlap');
+
+        HvarCompactor::compact($hvar, GlyphIdMap::fromRetained(5, [1 => true]));
+    }
+
+    public function testItRejectsMappingsOverlappingVariationDeltas(): void
+    {
+        $hvar = self::hvar();
+        $reader = new BinaryReader($hvar, 'source HVAR');
+        $data = 20 + $reader->uint32(28);
+        $mapOffset = $data + 10;
+        $hvar = substr_replace($hvar, "\0\0\0\x01\0", $mapOffset, 5);
+        $hvar = substr_replace($hvar, self::u32($mapOffset), 8, 4);
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('ItemVariationStore overlaps a delta-set mapping');
 
         HvarCompactor::compact($hvar, GlyphIdMap::fromRetained(5, [1 => true]));
     }
@@ -122,7 +188,7 @@ final class HvarCompactorTest extends TestCase
         $hvar = substr_replace($hvar, "\x02", $advanceOffset, 1);
 
         $this->expectException(InvalidFontException::class);
-        $this->expectExceptionMessage('mapping format is invalid');
+        $this->expectExceptionMessage('Unsupported DeltaSetIndexMap format 2');
 
         HvarCompactor::compact($hvar, GlyphIdMap::fromRetained(5, [1 => true]));
     }
