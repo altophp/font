@@ -42,6 +42,22 @@ final class CompactionShapingTest extends TestCase
                 new SfntWriter()->write($font, $source);
                 // Select both composed and decomposed forms used by the shaper.
                 $unicodes = UnicodeSet::fromText("AVATAR To WA office ffi fi fl 0123456789 A\u{0301} Á e\u{0308} ë o\u{0302} ô");
+            } elseif (\in_array($scenario, ['arabic', 'devanagari'], true)) {
+                $fixture = 'arabic' === $scenario ? 'NotoNaskhArabic' : 'NotoSansDevanagari';
+                self::assertTrue(copy(__DIR__ . '/../Fixtures/Fonts/' . $fixture . '-Regular.ttf', $source));
+                $font = Font::fromFile($source);
+                $unicodes = UnicodeSet::fromText('arabic' === $scenario
+                    ? 'سلام العربية لَا مُحَمَّد بسم الله'
+                    : 'नमस्ते हिन्दी क्षि त्रि श्र ज्ञ कि क्र र्क');
+            } elseif (\in_array($scenario, ['layout', 'vertical', 'carets', 'variable-carets'], true)) {
+                FontValidationTools::run([
+                    FontValidationTools::python(),
+                    __DIR__ . '/generate_layout.py',
+                    $scenario,
+                    $source,
+                ]);
+                $font = Font::fromFile($source);
+                $unicodes = UnicodeSet::fromText("abcdfi\u{0301}");
             } else {
                 FontValidationTools::run([
                     FontValidationTools::python(),
@@ -57,7 +73,7 @@ final class CompactionShapingTest extends TestCase
             FontValidationTools::sanitize($source, $directory . '/source-sanitized.ttf');
             $subset = $font->subset(new SubsetOptions($unicodes, glyphIds: GlyphIdPolicy::Compact))->font;
 
-            if ('inter' === $scenario) {
+            if (!\in_array($scenario, ['rows', 'fallback'], true)) {
                 self::assertLessThan($font->face()->glyphCount, $subset->face()->glyphCount);
             } else {
                 // Every synthetic glyph is retained, so glyph IDs can be compared directly.
@@ -86,6 +102,16 @@ final class CompactionShapingTest extends TestCase
                 $source,
                 ...$decodedFiles,
             ]);
+
+            if (\in_array($scenario, ['carets', 'variable-carets'], true)) {
+                FontValidationTools::run([
+                    FontValidationTools::python(),
+                    __DIR__ . '/compare_carets.py',
+                    $scenario,
+                    $source,
+                    ...$decodedFiles,
+                ]);
+            }
         } finally {
             foreach (glob($directory . '/*') ?: [] as $file) {
                 unlink($file);
@@ -103,5 +129,11 @@ final class CompactionShapingTest extends TestCase
         yield 'PairPos class-row splitting' => ['rows'];
         yield 'PairPos glyph-pair fallback and splitting' => ['fallback'];
         yield 'Inter glyph remapping and layout' => ['inter'];
+        yield 'Noto Naskh Arabic joining and marks' => ['arabic'];
+        yield 'Noto Sans Devanagari conjuncts and reordering' => ['devanagari'];
+        yield 'Contextual substitutions and attachments' => ['layout'];
+        yield 'Shared vertical variation data' => ['vertical'];
+        yield 'Ligature caret Device adjustments' => ['carets'];
+        yield 'Ligature caret variations and reordered stores' => ['variable-carets'];
     }
 }
