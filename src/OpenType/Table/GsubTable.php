@@ -18,6 +18,7 @@ use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\Exception\UnsupportedFontException;
 use Alto\Font\OpenType\Layout\ClassDefinitionTable;
 use Alto\Font\OpenType\Layout\CoverageTable;
+use Alto\Font\OpenType\Layout\LookupHeader;
 
 /**
  * Builds a conservative glyph substitution graph.
@@ -188,26 +189,16 @@ final readonly class GsubTable
      */
     private static function parseLookup(BinaryReader $reader, int $offset, int $lookupIndex, array &$contextRules): array
     {
-        $lookupType = $reader->uint16($offset);
-        $subtableCount = $reader->uint16($offset + 4);
+        $header = LookupHeader::parse($reader, $offset, 'GSUB', $lookupIndex);
+        $lookupType = $header->type;
 
         if ($lookupType < 1 || $lookupType > 8) {
             throw new UnsupportedFontException(\sprintf('GSUB lookup %d uses unsupported type %d.', $lookupIndex, $lookupType));
         }
 
-        if (0 === $subtableCount) {
-            throw new InvalidFontException(\sprintf('GSUB lookup %d must contain at least one subtable.', $lookupIndex));
-        }
-
         $substitutions = [];
 
-        for ($subtableIndex = 0; $subtableIndex < $subtableCount; ++$subtableIndex) {
-            $subtableOffset = $reader->uint16($offset + 6 + $subtableIndex * 2);
-
-            if (0 === $subtableOffset) {
-                throw new InvalidFontException(\sprintf('GSUB lookup %d subtable %d offset must not be NULL.', $lookupIndex, $subtableIndex));
-            }
-
+        foreach ($header->subtableOffsets as $subtableOffset) {
             self::parseSubtable($reader, $lookupType, $offset + $subtableOffset, $lookupIndex, $substitutions, $contextRules);
         }
 

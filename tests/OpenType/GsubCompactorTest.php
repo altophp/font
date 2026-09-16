@@ -28,6 +28,27 @@ use PHPUnit\Framework\TestCase;
 #[CoversClass(GsubCompactor::class)]
 final class GsubCompactorTest extends TestCase
 {
+    #[DataProvider('overlappingLookupHeaders')]
+    public function testItRejectsSubtablesOverlappingTheirLookupHeader(string $lookup): void
+    {
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('overlaps');
+
+        GsubCompactor::compact(self::gsubWithLookup($lookup), GlyphIdMap::fromRetained(3, [1 => true, 2 => true]));
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function overlappingLookupHeaders(): iterable
+    {
+        $single = pack('n*', 1, 6, 1, 1, 1, 1);
+
+        yield 'offset array' => [pack('n*', 1, 0, 1, 4, 1, 1, 1)];
+        yield 'mark filtering set' => [pack('n*', 1, 0x10, 1, 8) . $single];
+        yield 'extension in mark filtering set' => [pack('n*', 7, 0x10, 1, 8, 1, 1) . pack('N', 8) . $single];
+    }
+
     public function testItUsesExtensionLookupsWhenTheLookupListOffsetsOverflow(): void
     {
         $glyphCount = 16384;

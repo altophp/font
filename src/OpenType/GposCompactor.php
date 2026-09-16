@@ -20,6 +20,7 @@ use Alto\Font\OpenType\Layout\ClassDefinitionTable;
 use Alto\Font\OpenType\Layout\CoverageTable;
 use Alto\Font\OpenType\Layout\DeviceTable;
 use Alto\Font\OpenType\Layout\LayoutTableDirectory;
+use Alto\Font\OpenType\Layout\LookupHeader;
 use Alto\Font\OpenType\Layout\LookupListTable;
 use Alto\Font\OpenType\Layout\LookupTable;
 
@@ -68,20 +69,14 @@ final readonly class GposCompactor
         int $lookupCount,
         GlyphIdMap $glyphIds,
     ): LookupTable {
-        $lookupType = $reader->uint16($offset);
-        $lookupFlag = $reader->uint16($offset + 2);
-        $subtableCount = $reader->uint16($offset + 4);
-
-        if (0 === $subtableCount) {
-            throw new InvalidFontException(\sprintf('GPOS lookup %d must contain at least one subtable.', $lookupIndex));
-        }
+        $header = LookupHeader::parse($reader, $offset, 'GPOS', $lookupIndex);
+        $lookupType = $header->type;
 
         if (9 === $lookupType) {
             return self::compactExtensionLookup(
                 $reader,
                 $offset,
-                $lookupFlag,
-                $subtableCount,
+                $header,
                 $lookupIndex,
                 $lookupCount,
                 $glyphIds,
@@ -90,13 +85,7 @@ final readonly class GposCompactor
 
         $subtables = [];
 
-        for ($index = 0; $index < $subtableCount; ++$index) {
-            $subtableOffset = $reader->uint16($offset + 6 + $index * 2);
-
-            if (0 === $subtableOffset) {
-                throw new InvalidFontException(\sprintf('GPOS lookup %d subtable offset must not be NULL.', $lookupIndex));
-            }
-
+        foreach ($header->subtableOffsets as $subtableOffset) {
             $subtable = $offset + $subtableOffset;
             array_push(
                 $subtables,
@@ -106,8 +95,8 @@ final readonly class GposCompactor
 
         return new LookupTable(
             $lookupType,
-            $lookupFlag,
-            self::markFilteringSet($reader, $offset, $lookupFlag, $subtableCount),
+            $header->flag,
+            $header->markFilteringSet,
             $subtables,
         );
     }
@@ -115,8 +104,7 @@ final readonly class GposCompactor
     private static function compactExtensionLookup(
         BinaryReader $reader,
         int $offset,
-        int $lookupFlag,
-        int $subtableCount,
+        LookupHeader $header,
         int $lookupIndex,
         int $lookupCount,
         GlyphIdMap $glyphIds,
@@ -124,13 +112,7 @@ final readonly class GposCompactor
         $extensions = [];
         $extensionLookupType = null;
 
-        for ($index = 0; $index < $subtableCount; ++$index) {
-            $subtableOffset = $reader->uint16($offset + 6 + $index * 2);
-
-            if (0 === $subtableOffset) {
-                throw new InvalidFontException(\sprintf('GPOS lookup %d extension offset must not be NULL.', $lookupIndex));
-            }
-
+        foreach ($header->subtableOffsets as $subtableOffset) {
             $extension = $offset + $subtableOffset;
 
             if (1 !== $reader->uint16($extension)) {
@@ -165,22 +147,11 @@ final readonly class GposCompactor
 
         return new LookupTable(
             $extensionLookupType ?? 0,
-            $lookupFlag,
-            self::markFilteringSet($reader, $offset, $lookupFlag, $subtableCount),
+            $header->flag,
+            $header->markFilteringSet,
             $extensions,
             true,
         );
-    }
-
-    private static function markFilteringSet(
-        BinaryReader $reader,
-        int $offset,
-        int $lookupFlag,
-        int $subtableCount,
-    ): ?int {
-        return 0 === ($lookupFlag & 0x0010)
-            ? null
-            : $reader->uint16($offset + 6 + $subtableCount * 2);
     }
 
     /**

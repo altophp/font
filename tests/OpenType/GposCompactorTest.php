@@ -94,6 +94,29 @@ final class GposCompactorTest extends TestCase
         ];
     }
 
+    #[DataProvider('overlappingLookupHeaderProvider')]
+    public function testItRejectsSubtablesOverlappingLookupHeaders(int $type, bool $markFiltering): void
+    {
+        // A format-1 subtable can otherwise masquerade as markFilteringSet.
+        $single = self::u16(1) . self::u16(6) . self::u16(0) . CoverageTable::build([]);
+        $subtable = 9 === $type ? self::u16(1) . self::u16(1) . self::u32(8) . $single : $single;
+        $lookup = self::u16($type) . self::u16($markFiltering ? 0x10 : 0)
+            . self::u16(1) . self::u16($markFiltering ? 8 : 6) . $subtable;
+        $this->expectException(InvalidFontException::class);
+        GposCompactor::compact(self::gposWithLookup($lookup), GlyphIdMap::fromRetained(3, [2 => true]));
+    }
+
+    /**
+     * @return iterable<string, array{int, bool}>
+     */
+    public static function overlappingLookupHeaderProvider(): iterable
+    {
+        yield 'ordinary subtable over offsets' => [1, false];
+        yield 'extension subtable over offsets' => [9, false];
+        yield 'ordinary subtable over mark filtering set' => [1, true];
+        yield 'extension subtable over mark filtering set' => [9, true];
+    }
+
     #[DataProvider('unsupportedSubtableFormatProvider')]
     public function testItRejectsUnsupportedSubtableFormats(int $lookupType, string $message): void
     {
