@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Reduce and split oversized GPOS PairPos class matrices, with a glyph-pair
+  fallback for rows that cannot fit internal 16-bit offsets.
 - Compact legacy `kern` format 0 pairs and vertical `vhea`, `vmtx`, and VVAR
   mappings when glyph IDs are renumbered.
 - Compact every standard GSUB and GPOS lookup type, including contextual,

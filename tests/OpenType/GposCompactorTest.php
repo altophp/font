@@ -429,7 +429,206 @@ final class GposCompactorTest extends TestCase
             [2 => 1, 3 => 2],
             ClassDefinitionTable::parse($reader, $offset, $reader->uint16($offset + 10)),
         );
-        self::assertSame($matrix, $reader->string($offset + 16, \strlen($matrix)));
+        self::assertSame([2, 3], [$reader->uint16($offset + 12), $reader->uint16($offset + 14)]);
+        self::assertSame(
+            [0, 0, 0, -30, -40, -50],
+            array_map(fn(int $index): int => $reader->int16($offset + 16 + $index * 2), range(0, 5)),
+        );
+    }
+
+    public function testItSplitsPairClassRowsWhenDenseClassDefinitionsOverflow(): void
+    {
+        $glyphCount = 12001;
+        $coverage = CoverageTable::build(range(1, 12000));
+        $classOne = self::u16(1) . self::u16(1) . self::u16(12000);
+
+        for ($glyphId = 1; $glyphId <= 12000; ++$glyphId) {
+            $classOne .= self::u16(1 + $glyphId % 2);
+        }
+
+        $classTwo = ClassDefinitionTable::build([]);
+        $matrix = self::i16(0) . self::i16(-10) . self::i16(-20);
+        $coverageOffset = 16 + \strlen($matrix);
+        $classTwoOffset = $coverageOffset + \strlen($coverage);
+        $classOneOffset = $classTwoOffset + \strlen($classTwo);
+        $pair = self::u16(2)
+            . self::u16($coverageOffset)
+            . self::u16(0x0004)
+            . self::u16(0)
+            . self::u16($classOneOffset)
+            . self::u16($classTwoOffset)
+            . self::u16(3)
+            . self::u16(1)
+            . $matrix
+            . $coverage
+            . $classTwo
+            . $classOne;
+        $retained = array_fill_keys(range(0, $glyphCount - 1), true);
+        $output = GposCompactor::compact(
+            self::gpos(2, $pair),
+            GlyphIdMap::fromRetained($glyphCount, $retained),
+        );
+        $reader = new BinaryReader($output, 'split PairPos format 2');
+        $lookupList = $reader->uint16(8);
+        $lookup = $lookupList + $reader->uint16($lookupList + 2);
+
+        self::assertSame(2, $reader->uint16($lookup));
+        self::assertSame(2, $reader->uint16($lookup + 4));
+
+        foreach ([1 => -10, 2 => -20] as $index => $adjustment) {
+            $subtable = $lookup + $reader->uint16($lookup + 4 + $index * 2);
+            $subtableCoverage = CoverageTable::parse($reader, $subtable, $reader->uint16($subtable + 2));
+
+            self::assertSame(2, $reader->uint16($subtable));
+            self::assertCount(6000, $subtableCoverage);
+            self::assertSame([2, 1], [$reader->uint16($subtable + 12), $reader->uint16($subtable + 14)]);
+            self::assertSame([0, $adjustment], [
+                $reader->int16($subtable + 16),
+                $reader->int16($subtable + 18),
+            ]);
+        }
+    }
+
+    public function testItPreservesImplicitPairClassesWhileDenselyRemapping(): void
+    {
+        $coverage = CoverageTable::build([1, 2]);
+        $classOne = ClassDefinitionTable::build([2 => 2]);
+        $classTwo = ClassDefinitionTable::build([3 => 2]);
+        $matrix = implode('', array_map(self::i16(...), [0, -1, -2, -10, -11, -12, -20, -21, -22]));
+        $coverageOffset = 16 + \strlen($matrix);
+        $classOneOffset = $coverageOffset + \strlen($coverage);
+        $classTwoOffset = $classOneOffset + \strlen($classOne);
+        $pair = self::u16(2)
+            . self::u16($coverageOffset)
+            . self::u16(0x0004)
+            . self::u16(0)
+            . self::u16($classOneOffset)
+            . self::u16($classTwoOffset)
+            . self::u16(3)
+            . self::u16(3)
+            . $matrix
+            . $coverage
+            . $classOne
+            . $classTwo;
+        $mapping = GlyphIdMap::fromRetained(5, [1 => true, 2 => true, 3 => true]);
+        [$reader, $offset] = self::firstSubtable(GposCompactor::compact(self::gpos(2, $pair), $mapping));
+
+        self::assertSame([1, 2], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 2)));
+        self::assertSame([2 => 1], ClassDefinitionTable::parse($reader, $offset, $reader->uint16($offset + 8)));
+        self::assertSame([3 => 1], ClassDefinitionTable::parse($reader, $offset, $reader->uint16($offset + 10)));
+        self::assertSame([2, 2], [$reader->uint16($offset + 12), $reader->uint16($offset + 14)]);
+        self::assertSame(
+            [0, -2, -20, -22],
+            array_map(fn(int $index): int => $reader->int16($offset + 16 + $index * 2), range(0, 3)),
+        );
+    }
+
+    public function testItFallsBackToPairGlyphRecordsWhenAClassRowCannotFit(): void
+    {
+        $glyphCount = 12001;
+        $classTwo = self::u16(1) . self::u16(0) . self::u16($glyphCount);
+
+        for ($glyphId = 0; $glyphId < $glyphCount; ++$glyphId) {
+            $classTwo .= self::u16(1 + $glyphId % 2);
+        }
+
+        $variationIndex = self::u16(3) . self::u16(7) . self::u16(0x8000);
+        $matrix = self::u16(22) . self::u16(22) . self::u16(22);
+        $coverage = CoverageTable::build([0]);
+        $classOne = ClassDefinitionTable::build([]);
+        $coverageOffset = 16 + \strlen($matrix) + \strlen($variationIndex);
+        $classOneOffset = $coverageOffset + \strlen($coverage);
+        $classTwoOffset = $classOneOffset + \strlen($classOne);
+        $pair = self::u16(2)
+            . self::u16($coverageOffset)
+            . self::u16(0x0010)
+            . self::u16(0)
+            . self::u16($classOneOffset)
+            . self::u16($classTwoOffset)
+            . self::u16(1)
+            . self::u16(3)
+            . $matrix
+            . $variationIndex
+            . $coverage
+            . $classOne
+            . $classTwo;
+        $retained = array_fill_keys(range(0, $glyphCount - 1), true);
+        [$reader, $subtable] = self::firstSubtable(GposCompactor::compact(
+            self::gpos(2, $pair),
+            GlyphIdMap::fromRetained($glyphCount, $retained),
+        ));
+
+        self::assertSame(1, $reader->uint16($subtable));
+        self::assertSame([0], CoverageTable::parse($reader, $subtable, $reader->uint16($subtable + 2)));
+        $pairSet = $subtable + $reader->uint16($subtable + 10);
+        self::assertSame($glyphCount, $reader->uint16($pairSet));
+        self::assertSame([0, $glyphCount - 1], [
+            $reader->uint16($pairSet + 2),
+            $reader->uint16($pairSet + 2 + ($glyphCount - 1) * 4),
+        ]);
+        $device = $pairSet + $reader->uint16($pairSet + 4);
+        self::assertSame([3, 7, 0x8000], [
+            $reader->uint16($device),
+            $reader->uint16($device + 2),
+            $reader->uint16($device + 4),
+        ]);
+    }
+
+    public function testItSplitsPairGlyphFallbackRecordsAcrossSubtables(): void
+    {
+        $glyphCount = 12001;
+        $classTwo = self::u16(1) . self::u16(0) . self::u16($glyphCount);
+
+        for ($glyphId = 0; $glyphId < $glyphCount; ++$glyphId) {
+            $classTwo .= self::u16(1 + $glyphId % 2);
+        }
+
+        $variationIndex = self::u16(3) . self::u16(7) . self::u16(0x8000);
+        $matrix = str_repeat(self::i16(-10) . self::u16(28), 3);
+        $coverage = CoverageTable::build([0]);
+        $classOne = ClassDefinitionTable::build([]);
+        $coverageOffset = 16 + \strlen($matrix) + \strlen($variationIndex);
+        $classOneOffset = $coverageOffset + \strlen($coverage);
+        $classTwoOffset = $classOneOffset + \strlen($classOne);
+        $pair = self::u16(2)
+            . self::u16($coverageOffset)
+            . self::u16(0x0011)
+            . self::u16(0)
+            . self::u16($classOneOffset)
+            . self::u16($classTwoOffset)
+            . self::u16(1)
+            . self::u16(3)
+            . $matrix
+            . $variationIndex
+            . $coverage
+            . $classOne
+            . $classTwo;
+        $output = GposCompactor::compact(
+            self::gpos(2, $pair),
+            GlyphIdMap::fromRetained($glyphCount, array_fill_keys(range(0, $glyphCount - 1), true)),
+        );
+        $reader = new BinaryReader($output, 'split PairPos format 1 fallback');
+        $lookupList = $reader->uint16(8);
+        $lookup = $lookupList + $reader->uint16($lookupList + 2);
+
+        self::assertSame(9, $reader->uint16($lookup));
+        self::assertSame(2, $reader->uint16($lookup + 4));
+        $recordCounts = [];
+        $firstSecondGlyphs = [];
+
+        for ($index = 0; $index < 2; ++$index) {
+            $extension = $lookup + $reader->uint16($lookup + 6 + $index * 2);
+            self::assertSame([1, 2], [$reader->uint16($extension), $reader->uint16($extension + 2)]);
+            $subtable = $extension + $reader->uint32($extension + 4);
+            self::assertSame(1, $reader->uint16($subtable));
+            self::assertSame([0], CoverageTable::parse($reader, $subtable, $reader->uint16($subtable + 2)));
+            $pairSet = $subtable + $reader->uint16($subtable + 10);
+            $recordCounts[] = $reader->uint16($pairSet);
+            $firstSecondGlyphs[] = $reader->uint16($pairSet + 2);
+        }
+
+        self::assertSame([10919, 1082], $recordCounts);
+        self::assertSame([0, 10919], $firstSecondGlyphs);
     }
 
     public function testItRelocatesPairVariationIndexesRelativeToThePairSet(): void

@@ -931,7 +931,7 @@ final readonly class GposCompactor
 
         return match ($format) {
             1 => self::compactPairFormatOne($reader, $offset, $lookupIndex, $glyphIds),
-            2 => [self::compactPairFormatTwo($reader, $offset, $lookupIndex, $glyphIds)],
+            2 => self::compactPairFormatTwo($reader, $offset, $lookupIndex, $glyphIds),
             default => throw new UnsupportedFontException(\sprintf(
                 'Compacting GPOS lookup %d type 2 format %d is not supported.',
                 $lookupIndex,
@@ -1108,64 +1108,270 @@ final readonly class GposCompactor
         return $header . $data . $coverageData;
     }
 
+    /**
+     * @return non-empty-list<string>
+     */
     private static function compactPairFormatTwo(
         BinaryReader $reader,
         int $offset,
         int $lookupIndex,
         GlyphIdMap $glyphIds,
-    ): string {
+    ): array {
         $valueFormat1 = $reader->uint16($offset + 4);
         $valueFormat2 = $reader->uint16($offset + 6);
         $recordLength = self::valueRecordLength($valueFormat1, $lookupIndex)
             + self::valueRecordLength($valueFormat2, $lookupIndex);
         $class1Count = $reader->uint16($offset + 12);
         $class2Count = $reader->uint16($offset + 14);
-        $matrixLength = $class1Count * $class2Count * $recordLength;
-        $matrix = '';
-        $devices = [];
+        $sourceClassDefinition1 = ClassDefinitionTable::parse($reader, $offset, $reader->uint16($offset + 8));
+        $sourceClassDefinition2 = ClassDefinitionTable::parse($reader, $offset, $reader->uint16($offset + 10));
 
-        for ($recordOffset = 0; $recordOffset < $matrixLength; $recordOffset += $recordLength) {
-            [$value1, $devices1] = self::copyValueRecord(
-                $reader,
-                $offset + 16 + $recordOffset,
-                $valueFormat1,
-                $offset,
-                $lookupIndex,
-                16 + \strlen($matrix),
-            );
-            [$value2, $devices2] = self::copyValueRecord(
-                $reader,
-                $offset + 16 + $recordOffset + self::valueRecordLength($valueFormat1, $lookupIndex),
-                $valueFormat2,
-                $offset,
-                $lookupIndex,
-                16 + \strlen($matrix) + \strlen($value1),
-            );
-            $matrix .= $value1 . $value2;
-            $devices = [...$devices, ...$devices1, ...$devices2];
+        if ($class1Count < 1 || $class2Count < 1) {
+            throw new InvalidFontException(\sprintf('GPOS lookup %d pair class counts must include class 0.', $lookupIndex));
         }
-        $coverage = self::remapCoverage(
-            CoverageTable::parse($reader, $offset, $reader->uint16($offset + 2)),
-            $glyphIds,
-        );
-        $classDefinition1 = self::remapClasses(
-            ClassDefinitionTable::parse($reader, $offset, $reader->uint16($offset + 8)),
-            $glyphIds,
-        );
-        $classDefinition2 = self::remapClasses(
-            ClassDefinitionTable::parse($reader, $offset, $reader->uint16($offset + 10)),
-            $glyphIds,
-        );
 
-        foreach ($classDefinition1 as $class) {
+        $firstGlyphsByClass = [];
+
+        foreach (CoverageTable::parse($reader, $offset, $reader->uint16($offset + 2)) as $oldGlyphId) {
+            $newGlyphId = $glyphIds->newId($oldGlyphId);
+
+            if (null === $newGlyphId) {
+                continue;
+            }
+
+            $class = $sourceClassDefinition1[$oldGlyphId] ?? 0;
+
             if ($class >= $class1Count) {
                 throw new InvalidFontException(\sprintf('GPOS lookup %d class 1 value is outside the matrix.', $lookupIndex));
             }
+
+            $firstGlyphsByClass[$class][] = $newGlyphId;
         }
 
-        foreach ($classDefinition2 as $class) {
+        if ([] === $firstGlyphsByClass) {
+            $empty = self::buildPairFormatTwoChunk(
+                [],
+                [],
+                [0],
+                [],
+                $recordLength,
+                $valueFormat1,
+                $valueFormat2,
+            );
+
+            return [$empty ?? throw new \LogicException('An empty PairPos format 2 subtable must fit.')];
+        }
+
+        $sourceClass2ByNewGlyph = [];
+        $sourceClass2s = [0 => true];
+
+        foreach ($glyphIds->pairs() as $oldGlyphId => $newGlyphId) {
+            $class = $sourceClassDefinition2[$oldGlyphId] ?? 0;
+
             if ($class >= $class2Count) {
                 throw new InvalidFontException(\sprintf('GPOS lookup %d class 2 value is outside the matrix.', $lookupIndex));
+            }
+
+            $sourceClass2ByNewGlyph[$newGlyphId] = $class;
+            $sourceClass2s[$class] = true;
+        }
+
+        $sourceClass2s = array_keys($sourceClass2s);
+        sort($sourceClass2s, \SORT_NUMERIC);
+        $newClass2BySource = array_flip($sourceClass2s);
+        $classDefinition2 = [];
+
+        foreach ($sourceClass2ByNewGlyph as $newGlyphId => $sourceClass) {
+            $newClass = $newClass2BySource[$sourceClass];
+
+            if (0 !== $newClass) {
+                $classDefinition2[$newGlyphId] = $newClass;
+            }
+        }
+
+        ksort($firstGlyphsByClass, \SORT_NUMERIC);
+        $rows = [];
+
+        foreach (array_keys($firstGlyphsByClass) as $sourceClass1) {
+            $rows[$sourceClass1] = self::pairFormatTwoRow(
+                $reader,
+                $offset,
+                $lookupIndex,
+                $sourceClass1,
+                $class2Count,
+                $sourceClass2s,
+                $valueFormat1,
+                $valueFormat2,
+            );
+        }
+
+        $subtables = [];
+        $group = [];
+        $groupTable = null;
+
+        foreach (array_keys($firstGlyphsByClass) as $sourceClass1) {
+            $candidate = [...$group, $sourceClass1];
+            $candidateTable = self::buildPairFormatTwoChunk(
+                $candidate,
+                $firstGlyphsByClass,
+                $sourceClass2s,
+                $classDefinition2,
+                $recordLength,
+                $valueFormat1,
+                $valueFormat2,
+                $rows,
+            );
+
+            if (null !== $candidateTable) {
+                $group = $candidate;
+                $groupTable = $candidateTable;
+                continue;
+            }
+
+            if (null !== $groupTable) {
+                $subtables[] = $groupTable;
+                $group = [];
+                $groupTable = null;
+            }
+
+            $singleTable = self::buildPairFormatTwoChunk(
+                [$sourceClass1],
+                $firstGlyphsByClass,
+                $sourceClass2s,
+                $classDefinition2,
+                $recordLength,
+                $valueFormat1,
+                $valueFormat2,
+                $rows,
+            );
+
+            if (null !== $singleTable) {
+                $group = [$sourceClass1];
+                $groupTable = $singleTable;
+                continue;
+            }
+
+            array_push(
+                $subtables,
+                ...self::pairFormatTwoRowAsFormatOne(
+                    $firstGlyphsByClass[$sourceClass1],
+                    $rows[$sourceClass1],
+                    $sourceClass2s,
+                    $sourceClass2ByNewGlyph,
+                    $valueFormat1,
+                    $valueFormat2,
+                    $lookupIndex,
+                ),
+            );
+        }
+
+        if (null !== $groupTable) {
+            $subtables[] = $groupTable;
+        }
+
+        if ([] === $subtables) {
+            throw new \LogicException('PairPos format 2 compaction must produce at least one subtable.');
+        }
+
+        return $subtables;
+    }
+
+    /**
+     * @param list<int> $sourceClass2s
+     *
+     * @return list<array{data: string, devices: list<array{offset: int, base: int, data: string}>}>
+     */
+    private static function pairFormatTwoRow(
+        BinaryReader $reader,
+        int $offset,
+        int $lookupIndex,
+        int $sourceClass1,
+        int $sourceClass2Count,
+        array $sourceClass2s,
+        int $valueFormat1,
+        int $valueFormat2,
+    ): array {
+        $valueLength1 = self::valueRecordLength($valueFormat1, $lookupIndex);
+        $recordLength = $valueLength1 + self::valueRecordLength($valueFormat2, $lookupIndex);
+        $cells = [];
+
+        foreach ($sourceClass2s as $sourceClass2) {
+            $inputOffset = $offset + 16 + ($sourceClass1 * $sourceClass2Count + $sourceClass2) * $recordLength;
+            [$value1, $devices1] = self::copyValueRecord(
+                $reader,
+                $inputOffset,
+                $valueFormat1,
+                $offset,
+                $lookupIndex,
+                0,
+            );
+            [$value2, $devices2] = self::copyValueRecord(
+                $reader,
+                $inputOffset + $valueLength1,
+                $valueFormat2,
+                $offset,
+                $lookupIndex,
+                \strlen($value1),
+            );
+            $cells[] = ['data' => $value1 . $value2, 'devices' => [...$devices1, ...$devices2]];
+        }
+
+        return $cells;
+    }
+
+    /**
+     * @param list<int>                                                                                               $sourceClass1s
+     * @param array<int, list<int>>                                                                                   $firstGlyphsByClass
+     * @param list<int>                                                                                               $sourceClass2s
+     * @param array<int, int>                                                                                         $classDefinition2
+     * @param array<int, list<array{data: string, devices: list<array{offset: int, base: int, data: string}>}>>          $rows
+     */
+    private static function buildPairFormatTwoChunk(
+        array $sourceClass1s,
+        array $firstGlyphsByClass,
+        array $sourceClass2s,
+        array $classDefinition2,
+        int $recordLength,
+        int $valueFormat1,
+        int $valueFormat2,
+        array $rows = [],
+    ): ?string {
+        $containsSourceClassZero = isset($firstGlyphsByClass[0]) && \in_array(0, $sourceClass1s, true);
+        $rowSources = $containsSourceClassZero ? $sourceClass1s : [null, ...$sourceClass1s];
+        $classDefinition1 = [];
+        $coverage = [];
+        $newClass = $containsSourceClassZero ? 0 : 1;
+
+        foreach ($sourceClass1s as $sourceClass1) {
+            foreach ($firstGlyphsByClass[$sourceClass1] as $glyphId) {
+                $coverage[] = $glyphId;
+
+                if (0 !== $newClass) {
+                    $classDefinition1[$glyphId] = $newClass;
+                }
+            }
+
+            ++$newClass;
+        }
+
+        $matrix = '';
+        $devices = [];
+
+        foreach ($rowSources as $sourceClass1) {
+            foreach ($sourceClass2s as $column => $_sourceClass2) {
+                $cell = null === $sourceClass1
+                    ? ['data' => str_repeat("\0", $recordLength), 'devices' => []]
+                    : $rows[$sourceClass1][$column];
+                $cellOffset = 16 + \strlen($matrix);
+                $matrix .= $cell['data'];
+
+                foreach ($cell['devices'] as $device) {
+                    $devices[] = [
+                        'offset' => $cellOffset + $device['offset'],
+                        'base' => $device['base'],
+                        'data' => $device['data'],
+                    ];
+                }
             }
         }
 
@@ -1176,20 +1382,148 @@ final readonly class GposCompactor
         $classDefinitionOffset1 = $coverageOffset + \strlen($coverageData);
         $classDefinitionOffset2 = $classDefinitionOffset1 + \strlen($classDefinitionData1);
 
+        if ($coverageOffset > 0xFFFF || $classDefinitionOffset1 > 0xFFFF || $classDefinitionOffset2 > 0xFFFF) {
+            return null;
+        }
+
         $table = self::uint16(2)
-            . self::offset16($coverageOffset)
+            . self::uint16($coverageOffset)
             . self::uint16($valueFormat1)
             . self::uint16($valueFormat2)
-            . self::offset16($classDefinitionOffset1)
-            . self::offset16($classDefinitionOffset2)
-            . self::uint16($class1Count)
-            . self::uint16($class2Count)
+            . self::uint16($classDefinitionOffset1)
+            . self::uint16($classDefinitionOffset2)
+            . self::uint16(\count($rowSources))
+            . self::uint16(\count($sourceClass2s))
             . $matrix
             . $coverageData
             . $classDefinitionData1
             . $classDefinitionData2;
 
-        return self::appendDevices($table, $devices);
+        try {
+            return self::appendDevices($table, $devices);
+        } catch (UnsupportedFontException) {
+            return null;
+        }
+    }
+
+    /**
+     * @param list<int>                                                                                      $firstGlyphs
+     * @param list<array{data: string, devices: list<array{offset: int, base: int, data: string}>}>           $row
+     * @param list<int>                                                                                      $sourceClass2s
+     * @param array<int, int>                                                                                $sourceClass2ByNewGlyph
+     *
+     * @return non-empty-list<string>
+     */
+    private static function pairFormatTwoRowAsFormatOne(
+        array $firstGlyphs,
+        array $row,
+        array $sourceClass2s,
+        array $sourceClass2ByNewGlyph,
+        int $valueFormat1,
+        int $valueFormat2,
+        int $lookupIndex,
+    ): array {
+        $columnBySourceClass2 = array_flip($sourceClass2s);
+        $subtables = [];
+
+        foreach ($firstGlyphs as $firstGlyphId) {
+            $records = '';
+            $recordCount = 0;
+            $devices = [];
+            $deviceData = [];
+            $deviceDataLength = 0;
+
+            foreach ($sourceClass2ByNewGlyph as $secondGlyphId => $sourceClass2) {
+                $cell = $row[$columnBySourceClass2[$sourceClass2]];
+                $record = self::uint16($secondGlyphId) . $cell['data'];
+                $candidateDeviceData = $deviceData;
+                $candidateDeviceDataLength = $deviceDataLength;
+
+                foreach ($cell['devices'] as $device) {
+                    if (!isset($candidateDeviceData[$device['data']])) {
+                        $candidateDeviceData[$device['data']] = true;
+                        $candidateDeviceDataLength += \strlen($device['data']);
+                    }
+                }
+
+                $candidateLength = 2 + \strlen($records) + \strlen($record)
+                    + $candidateDeviceDataLength;
+
+                if ($candidateLength > 0xFFF3 && 0 !== $recordCount) {
+                    $subtables[] = self::pairFormatOneRecordChunk(
+                        $firstGlyphId,
+                        $records,
+                        $recordCount,
+                        $devices,
+                        $valueFormat1,
+                        $valueFormat2,
+                    );
+                    $records = '';
+                    $recordCount = 0;
+                    $devices = [];
+                    $deviceData = [];
+                    $deviceDataLength = 0;
+                }
+
+                $recordOffset = 4 + \strlen($records);
+                $records .= $record;
+
+                foreach ($cell['devices'] as $device) {
+                    $devices[] = [
+                        'offset' => $recordOffset + $device['offset'],
+                        'base' => $device['base'],
+                        'data' => $device['data'],
+                    ];
+
+                    if (!isset($deviceData[$device['data']])) {
+                        $deviceData[$device['data']] = true;
+                        $deviceDataLength += \strlen($device['data']);
+                    }
+                }
+
+                ++$recordCount;
+
+                if (2 + \strlen($records) + $deviceDataLength > 0xFFF3) {
+                    throw new UnsupportedFontException(\sprintf(
+                        'GPOS lookup %d contains a class-pair record that exceeds PairPos format 1 limits.',
+                        $lookupIndex,
+                    ));
+                }
+            }
+
+            if (0 !== $recordCount) {
+                $subtables[] = self::pairFormatOneRecordChunk(
+                    $firstGlyphId,
+                    $records,
+                    $recordCount,
+                    $devices,
+                    $valueFormat1,
+                    $valueFormat2,
+                );
+            }
+        }
+
+        if ([] === $subtables) {
+            throw new \LogicException('A retained PairPos class row must produce at least one subtable.');
+        }
+
+        return $subtables;
+    }
+
+    /**
+     * @param list<array{offset: int, base: int, data: string}> $devices
+     */
+    private static function pairFormatOneRecordChunk(
+        int $firstGlyphId,
+        string $records,
+        int $recordCount,
+        array $devices,
+        int $valueFormat1,
+        int $valueFormat2,
+    ): string {
+        $pairSet = self::appendDevices(self::uint16($recordCount) . $records, $devices);
+
+        return self::buildPairFormatOne([$firstGlyphId], [$pairSet], $valueFormat1, $valueFormat2);
     }
 
     private static function compactMarkToBase(

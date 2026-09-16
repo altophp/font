@@ -43,8 +43,10 @@ records retain valid Device and VariationIndex data while their offsets are
 relocated. Non-NULL feature parameters are supported for `size`, `ss01`
 through `ss20`, and `cv01` through `cv99`; unknown parameter formats are
 rejected explicitly. Oversized PairPos format 1 data is split across lookup
-subtables. A PairPos format 2 class matrix that cannot fit its internal 16-bit
-offsets is still rejected.
+subtables. PairPos format 2 removes unused classes and splits class rows when
+its internal 16-bit offsets would overflow. A row that still cannot fit is
+expanded into format 1 glyph-pair records, split across subtables as needed.
+Implicit class 0 and Device or VariationIndex adjustments are preserved.
 
 ## Remove hinting
 

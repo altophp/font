@@ -13,6 +13,12 @@ $characters = UnicodeSet::fromText('Hello, Alto!');
 
 Repeated characters produce one set entry. The input must be valid UTF-8.
 
+`fromText()` selects the codepoints present in the input. It does not add
+Unicode normalization equivalents: `A` followed by a combining acute accent
+does not also select `Á`. A text shaper may prefer the composed character when
+it exists in the source font, so omitting it can change glyph selection or
+positioning. Include both forms when preserving that behavior matters.
+
 ## Select codepoints and ranges
 
 ```php
