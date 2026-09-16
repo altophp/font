@@ -45,14 +45,15 @@ VariationIndex data while their offsets are relocated. Non-NULL feature
 parameters are supported for `size`, `ss01` through `ss20`, and `cv01` through
 `cv99`; unknown parameter formats are rejected explicitly.
 
-Oversized PairPos format 1 data is split between existing PairSets across
-lookup subtables. A single existing PairSet that cannot fit within the output
-subtable's 16-bit offsets is rejected; it is not split internally. PairPos
+Oversized PairPos format 1 data is split across lookup subtables, including
+within an existing PairSet at glyph-pair record boundaries. Both value records
+and their Device or VariationIndex adjustments are retained. PairPos
 format 2 removes unused classes and splits class rows when its internal
 16-bit offsets would overflow. A row that still cannot fit is expanded into
 format 1 glyph-pair records, split across subtables as needed. Implicit class
-0 and Device or VariationIndex adjustments are preserved. Other layout
-structures can still exceed their offset limits and be rejected.
+0 and Device or VariationIndex adjustments are preserved. A single pair record
+with its adjustment data, or other layout structures, can still exceed their
+offset limits and be rejected.
 
 GDEF ligature caret values support formats 1, 2 and 3. Format 3 retains Device
 or VariationIndex adjustments while relocating their offsets. The shared

@@ -20,8 +20,10 @@ use Alto\Font\OpenType\Layout\ClassDefinitionTable;
 use Alto\Font\OpenType\Layout\CoverageTable;
 use Alto\Font\OpenType\Layout\DeviceTable;
 use Alto\Font\OpenType\Layout\LayoutTableDirectory;
+use Alto\Font\OpenType\Layout\LookupHeader;
 use Alto\Font\OpenType\Layout\LookupListTable;
 use Alto\Font\OpenType\Layout\LookupTable;
+use Alto\Font\OpenType\Layout\PairPositioningTable;
 
 /**
  * Remaps supported GPOS structures to compact glyph identifiers.
@@ -68,20 +70,14 @@ final readonly class GposCompactor
         int $lookupCount,
         GlyphIdMap $glyphIds,
     ): LookupTable {
-        $lookupType = $reader->uint16($offset);
-        $lookupFlag = $reader->uint16($offset + 2);
-        $subtableCount = $reader->uint16($offset + 4);
-
-        if (0 === $subtableCount) {
-            throw new InvalidFontException(\sprintf('GPOS lookup %d must contain at least one subtable.', $lookupIndex));
-        }
+        $header = LookupHeader::parse($reader, $offset, 'GPOS', $lookupIndex);
+        $lookupType = $header->type;
 
         if (9 === $lookupType) {
             return self::compactExtensionLookup(
                 $reader,
                 $offset,
-                $lookupFlag,
-                $subtableCount,
+                $header,
                 $lookupIndex,
                 $lookupCount,
                 $glyphIds,
@@ -90,13 +86,7 @@ final readonly class GposCompactor
 
         $subtables = [];
 
-        for ($index = 0; $index < $subtableCount; ++$index) {
-            $subtableOffset = $reader->uint16($offset + 6 + $index * 2);
-
-            if (0 === $subtableOffset) {
-                throw new InvalidFontException(\sprintf('GPOS lookup %d subtable offset must not be NULL.', $lookupIndex));
-            }
-
+        foreach ($header->subtableOffsets as $subtableOffset) {
             $subtable = $offset + $subtableOffset;
             array_push(
                 $subtables,
@@ -106,8 +96,8 @@ final readonly class GposCompactor
 
         return new LookupTable(
             $lookupType,
-            $lookupFlag,
-            self::markFilteringSet($reader, $offset, $lookupFlag, $subtableCount),
+            $header->flag,
+            $header->markFilteringSet,
             $subtables,
         );
     }
@@ -115,8 +105,7 @@ final readonly class GposCompactor
     private static function compactExtensionLookup(
         BinaryReader $reader,
         int $offset,
-        int $lookupFlag,
-        int $subtableCount,
+        LookupHeader $header,
         int $lookupIndex,
         int $lookupCount,
         GlyphIdMap $glyphIds,
@@ -124,13 +113,7 @@ final readonly class GposCompactor
         $extensions = [];
         $extensionLookupType = null;
 
-        for ($index = 0; $index < $subtableCount; ++$index) {
-            $subtableOffset = $reader->uint16($offset + 6 + $index * 2);
-
-            if (0 === $subtableOffset) {
-                throw new InvalidFontException(\sprintf('GPOS lookup %d extension offset must not be NULL.', $lookupIndex));
-            }
-
+        foreach ($header->subtableOffsets as $subtableOffset) {
             $extension = $offset + $subtableOffset;
 
             if (1 !== $reader->uint16($extension)) {
@@ -165,22 +148,11 @@ final readonly class GposCompactor
 
         return new LookupTable(
             $extensionLookupType ?? 0,
-            $lookupFlag,
-            self::markFilteringSet($reader, $offset, $lookupFlag, $subtableCount),
+            $header->flag,
+            $header->markFilteringSet,
             $extensions,
             true,
         );
-    }
-
-    private static function markFilteringSet(
-        BinaryReader $reader,
-        int $offset,
-        int $lookupFlag,
-        int $subtableCount,
-    ): ?int {
-        return 0 === ($lookupFlag & 0x0010)
-            ? null
-            : $reader->uint16($offset + 6 + $subtableCount * 2);
     }
 
     /**
@@ -953,8 +925,8 @@ final readonly class GposCompactor
         $coverage = CoverageTable::parse($reader, $offset, $reader->uint16($offset + 2));
         $valueFormat1 = $reader->uint16($offset + 4);
         $valueFormat2 = $reader->uint16($offset + 6);
-        $valueLength = self::valueRecordLength($valueFormat1, $lookupIndex)
-            + self::valueRecordLength($valueFormat2, $lookupIndex);
+        self::valueRecordLength($valueFormat1, $lookupIndex);
+        self::valueRecordLength($valueFormat2, $lookupIndex);
         $pairSetCount = $reader->uint16($offset + 8);
 
         if ($pairSetCount !== \count($coverage)) {
@@ -972,141 +944,43 @@ final readonly class GposCompactor
                 continue;
             }
 
-            $pairSet = $offset + $pairSetOffset;
-            $records = '';
-            $recordCount = 0;
-            $pairSetDevices = [];
-            $recordOffset = $pairSet + 2;
+            $records = self::pairRecords($reader, $offset + $pairSetOffset, $valueFormat1, $valueFormat2, $lookupIndex, $glyphIds);
 
-            for ($index = 0, $count = $reader->uint16($pairSet); $index < $count; ++$index) {
-                $newSecondGlyphId = $glyphIds->newId($reader->uint16($recordOffset));
-
-                if (null !== $newSecondGlyphId) {
-                    $outputOffset = 4 + \strlen($records);
-                    [$value1, $devices1] = self::copyValueRecord(
-                        $reader,
-                        $recordOffset + 2,
-                        $valueFormat1,
-                        $pairSet,
-                        $lookupIndex,
-                        $outputOffset,
-                    );
-                    [$value2, $devices2] = self::copyValueRecord(
-                        $reader,
-                        $recordOffset + 2 + self::valueRecordLength($valueFormat1, $lookupIndex),
-                        $valueFormat2,
-                        $pairSet,
-                        $lookupIndex,
-                        $outputOffset + \strlen($value1),
-                    );
-                    $records .= self::uint16($newSecondGlyphId) . $value1 . $value2;
-                    $pairSetDevices = [...$pairSetDevices, ...$devices1, ...$devices2];
-                    ++$recordCount;
-                }
-
-                $recordOffset += 2 + $valueLength;
+            foreach (PairPositioningTable::splitRecords($records, $lookupIndex) as $pairSet) {
+                $firstGlyphs[] = $newFirstGlyphId;
+                $pairSets[] = $pairSet;
             }
-
-            if (0 === $recordCount) {
-                continue;
-            }
-
-            $firstGlyphs[] = $newFirstGlyphId;
-            $pairSets[] = DeviceTable::append(
-                self::uint16($recordCount) . $records,
-                $pairSetDevices,
-            );
         }
 
-        return self::splitPairFormatOne($firstGlyphs, $pairSets, $valueFormat1, $valueFormat2, $lookupIndex);
+        return PairPositioningTable::buildSubtables($firstGlyphs, $pairSets, $valueFormat1, $valueFormat2);
     }
 
     /**
-     * @param list<int>    $firstGlyphs
-     * @param list<string> $pairSets
-     *
-     * @return non-empty-list<string>
+     * @return \Generator<int, array{secondGlyphId: int, data: string, devices: list<array{offset: int, base: int, data: string}>}>
      */
-    private static function splitPairFormatOne(
-        array $firstGlyphs,
-        array $pairSets,
+    private static function pairRecords(
+        BinaryReader $reader,
+        int $pairSet,
         int $valueFormat1,
         int $valueFormat2,
         int $lookupIndex,
-    ): array {
-        if ([] === $pairSets) {
-            return [self::buildPairFormatOne([], [], $valueFormat1, $valueFormat2)];
-        }
+        GlyphIdMap $glyphIds,
+    ): \Generator {
+        $valueLength1 = self::valueRecordLength($valueFormat1, $lookupIndex);
+        $recordLength = 2 + $valueLength1 + self::valueRecordLength($valueFormat2, $lookupIndex);
+        $recordOffset = $pairSet + 2;
 
-        $subtables = [];
-        $groupGlyphs = [];
-        $groupPairSets = [];
-        $groupDataLength = 0;
+        for ($index = 0, $count = $reader->uint16($pairSet); $index < $count; ++$index) {
+            $newSecondGlyphId = $glyphIds->newId($reader->uint16($recordOffset));
 
-        foreach ($pairSets as $index => $pairSet) {
-            $pairSetLength = \strlen($pairSet);
-
-            if (12 + $pairSetLength > 0xFFFF) {
-                throw new UnsupportedFontException(\sprintf(
-                    'GPOS lookup %d contains a PairSet that exceeds a 16-bit PairPos offset.',
-                    $lookupIndex,
-                ));
+            if (null !== $newSecondGlyphId) {
+                [$value1, $devices1] = self::copyValueRecord($reader, $recordOffset + 2, $valueFormat1, $pairSet, $lookupIndex, 0);
+                [$value2, $devices2] = self::copyValueRecord($reader, $recordOffset + 2 + $valueLength1, $valueFormat2, $pairSet, $lookupIndex, $valueLength1);
+                yield ['secondGlyphId' => $newSecondGlyphId, 'data' => $value1 . $value2, 'devices' => [...$devices1, ...$devices2]];
             }
 
-            $nextCount = \count($groupPairSets) + 1;
-            $nextCoverageOffset = 10 + $nextCount * 2 + $groupDataLength + $pairSetLength;
-
-            if ($nextCoverageOffset > 0xFFFF) {
-                $subtables[] = self::buildPairFormatOne($groupGlyphs, $groupPairSets, $valueFormat1, $valueFormat2);
-                $groupGlyphs = [];
-                $groupPairSets = [];
-                $groupDataLength = 0;
-            }
-
-            $groupGlyphs[] = $firstGlyphs[$index];
-            $groupPairSets[] = $pairSet;
-            $groupDataLength += $pairSetLength;
+            $recordOffset += $recordLength;
         }
-
-        $subtables[] = self::buildPairFormatOne($groupGlyphs, $groupPairSets, $valueFormat1, $valueFormat2);
-
-        return $subtables;
-    }
-
-    /**
-     * @param list<int>    $firstGlyphs
-     * @param list<string> $pairSets
-     */
-    private static function buildPairFormatOne(
-        array $firstGlyphs,
-        array $pairSets,
-        int $valueFormat1,
-        int $valueFormat2,
-    ): string {
-        $headerLength = 10 + \count($pairSets) * 2;
-        $header = self::uint16(1);
-        $data = '';
-        $cursor = $headerLength;
-
-        foreach ($pairSets as $pairSet) {
-            $data .= $pairSet;
-            $cursor += \strlen($pairSet);
-        }
-
-        $coverageData = CoverageTable::build($firstGlyphs);
-        $coverageOffset = $cursor;
-        $cursor = $headerLength;
-        $header .= self::offset16($coverageOffset)
-            . self::uint16($valueFormat1)
-            . self::uint16($valueFormat2)
-            . self::uint16(\count($pairSets));
-
-        foreach ($pairSets as $pairSet) {
-            $header .= self::offset16($cursor);
-            $cursor += \strlen($pairSet);
-        }
-
-        return $header . $data . $coverageData;
     }
 
     /**
@@ -1428,79 +1302,15 @@ final readonly class GposCompactor
         $subtables = [];
 
         foreach ($firstGlyphs as $firstGlyphId) {
-            $records = '';
-            $recordCount = 0;
-            $devices = [];
-            $deviceData = [];
-            $deviceDataLength = 0;
-
-            foreach ($sourceClass2ByNewGlyph as $secondGlyphId => $sourceClass2) {
-                $cell = $row[$columnBySourceClass2[$sourceClass2]];
-                $record = self::uint16($secondGlyphId) . $cell['data'];
-                $candidateDeviceData = $deviceData;
-                $candidateDeviceDataLength = $deviceDataLength;
-
-                foreach ($cell['devices'] as $device) {
-                    if (!isset($candidateDeviceData[$device['data']])) {
-                        $candidateDeviceData[$device['data']] = true;
-                        $candidateDeviceDataLength += \strlen($device['data']);
-                    }
+            $records = (static function () use ($sourceClass2ByNewGlyph, $row, $columnBySourceClass2): \Generator {
+                foreach ($sourceClass2ByNewGlyph as $secondGlyphId => $sourceClass2) {
+                    $cell = $row[$columnBySourceClass2[$sourceClass2]];
+                    yield ['secondGlyphId' => $secondGlyphId, ...$cell];
                 }
+            })();
 
-                $candidateLength = 2 + \strlen($records) + \strlen($record)
-                    + $candidateDeviceDataLength;
-
-                if ($candidateLength > 0xFFF3 && 0 !== $recordCount) {
-                    $subtables[] = self::pairFormatOneRecordChunk(
-                        $firstGlyphId,
-                        $records,
-                        $recordCount,
-                        $devices,
-                        $valueFormat1,
-                        $valueFormat2,
-                    );
-                    $records = '';
-                    $recordCount = 0;
-                    $devices = [];
-                    $deviceData = [];
-                    $deviceDataLength = 0;
-                }
-
-                $recordOffset = 4 + \strlen($records);
-                $records .= $record;
-
-                foreach ($cell['devices'] as $device) {
-                    $devices[] = [
-                        'offset' => $recordOffset + $device['offset'],
-                        'base' => $device['base'],
-                        'data' => $device['data'],
-                    ];
-
-                    if (!isset($deviceData[$device['data']])) {
-                        $deviceData[$device['data']] = true;
-                        $deviceDataLength += \strlen($device['data']);
-                    }
-                }
-
-                ++$recordCount;
-
-                if (2 + \strlen($records) + $deviceDataLength > 0xFFF3) {
-                    throw new UnsupportedFontException(\sprintf(
-                        'GPOS lookup %d contains a class-pair record that exceeds PairPos format 1 limits.',
-                        $lookupIndex,
-                    ));
-                }
-            }
-
-            if (0 !== $recordCount) {
-                $subtables[] = self::pairFormatOneRecordChunk(
-                    $firstGlyphId,
-                    $records,
-                    $recordCount,
-                    $devices,
-                    $valueFormat1,
-                    $valueFormat2,
-                );
+            foreach (PairPositioningTable::splitRecords($records, $lookupIndex) as $pairSet) {
+                $subtables[] = PairPositioningTable::build([$firstGlyphId], [$pairSet], $valueFormat1, $valueFormat2);
             }
         }
 
@@ -1509,22 +1319,6 @@ final readonly class GposCompactor
         }
 
         return $subtables;
-    }
-
-    /**
-     * @param list<array{offset: int, base: int, data: string}> $devices
-     */
-    private static function pairFormatOneRecordChunk(
-        int $firstGlyphId,
-        string $records,
-        int $recordCount,
-        array $devices,
-        int $valueFormat1,
-        int $valueFormat2,
-    ): string {
-        $pairSet = DeviceTable::append(self::uint16($recordCount) . $records, $devices);
-
-        return self::buildPairFormatOne([$firstGlyphId], [$pairSet], $valueFormat1, $valueFormat2);
     }
 
     private static function compactMarkToBase(

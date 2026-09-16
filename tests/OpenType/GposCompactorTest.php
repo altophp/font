@@ -94,6 +94,29 @@ final class GposCompactorTest extends TestCase
         ];
     }
 
+    #[DataProvider('overlappingLookupHeaderProvider')]
+    public function testItRejectsSubtablesOverlappingLookupHeaders(int $type, bool $markFiltering): void
+    {
+        // A format-1 subtable can otherwise masquerade as markFilteringSet.
+        $single = self::u16(1) . self::u16(6) . self::u16(0) . CoverageTable::build([]);
+        $subtable = 9 === $type ? self::u16(1) . self::u16(1) . self::u32(8) . $single : $single;
+        $lookup = self::u16($type) . self::u16($markFiltering ? 0x10 : 0)
+            . self::u16(1) . self::u16($markFiltering ? 8 : 6) . $subtable;
+        $this->expectException(InvalidFontException::class);
+        GposCompactor::compact(self::gposWithLookup($lookup), GlyphIdMap::fromRetained(3, [2 => true]));
+    }
+
+    /**
+     * @return iterable<string, array{int, bool}>
+     */
+    public static function overlappingLookupHeaderProvider(): iterable
+    {
+        yield 'ordinary subtable over offsets' => [1, false];
+        yield 'extension subtable over offsets' => [9, false];
+        yield 'ordinary subtable over mark filtering set' => [1, true];
+        yield 'extension subtable over mark filtering set' => [9, true];
+    }
+
     #[DataProvider('unsupportedSubtableFormatProvider')]
     public function testItRejectsUnsupportedSubtableFormats(int $lookupType, string $message): void
     {
@@ -702,26 +725,113 @@ final class GposCompactorTest extends TestCase
         }
     }
 
-    public function testItRejectsAnIndividuallyOversizedPairSet(): void
+    public function testItSplitsAnIndividuallyOversizedPairSet(): void
     {
         $pairSet = self::pairSetWithSecondGlyphs(32762);
         $coverage = CoverageTable::build([32762]);
-        $pair = self::u16(1)
-            . self::u16(12)
-            . self::u16(0)
-            . self::u16(0)
-            . self::u16(1)
-            . self::u16(12 + \strlen($coverage))
-            . $coverage
-            . $pairSet;
-
-        $this->expectException(UnsupportedFontException::class);
-        $this->expectExceptionMessage('PairSet that exceeds a 16-bit PairPos offset');
-
-        GposCompactor::compact(
+        $pair = self::u16(1) . self::u16(12) . self::u16(0) . self::u16(0)
+            . self::u16(1) . self::u16(12 + \strlen($coverage)) . $coverage . $pairSet;
+        $output = GposCompactor::compact(
             self::gpos(2, $pair),
             GlyphIdMap::fromRetained(32763, array_fill_keys(range(0, 32762), true)),
         );
+        $reader = new BinaryReader($output, 'oversized pair set');
+        $subtables = self::pairSubtables($reader);
+        self::assertCount(2, $subtables);
+        $secondGlyphs = [];
+
+        foreach ($subtables as $subtable) {
+            self::assertSame([32762], CoverageTable::parse($reader, $subtable, $reader->uint16($subtable + 2)));
+            $set = $subtable + $reader->uint16($subtable + 10);
+
+            for ($index = 0; $index < $reader->uint16($set); ++$index) {
+                $secondGlyphs[] = $reader->uint16($set + 2 + $index * 2);
+            }
+        }
+
+        self::assertSame(range(1, 32762), $secondGlyphs);
+    }
+
+    public function testItFiltersAnOversizedPairSetBeforeSplitting(): void
+    {
+        $pairSet = self::pairSetWithSecondGlyphs(32762);
+        $coverage = CoverageTable::build([32762]);
+        $pair = self::u16(1) . self::u16(12) . self::u16(0) . self::u16(0)
+            . self::u16(1) . self::u16(12 + \strlen($coverage)) . $coverage . $pairSet;
+        [$reader, $subtable] = self::firstSubtable(GposCompactor::compact(
+            self::gpos(2, $pair),
+            GlyphIdMap::fromRetained(32763, [2 => true, 32762 => true]),
+        ));
+        self::assertCount(1, self::pairSubtables($reader));
+        self::assertSame([2], CoverageTable::parse($reader, $subtable, $reader->uint16($subtable + 2)));
+        $set = $subtable + $reader->uint16($subtable + 10);
+        self::assertSame([2, 1, 2], [$reader->uint16($set), $reader->uint16($set + 2), $reader->uint16($set + 4)]);
+    }
+
+    public function testItSplitsPairSetsWithBothValuesAndDeviceAndVariationAdjustments(): void
+    {
+        $count = 6552;
+        $device = self::u16(12) . self::u16(12) . self::u16(1) . self::u16(0x4000);
+        $variation = self::u16(3) . self::u16(7) . self::u16(0x8000);
+        $records = '';
+
+        for ($glyph = 1; $glyph <= $count; ++$glyph) {
+            $records .= self::u16($glyph) . self::i16(-20) . self::u16(65522)
+                . self::i16(30) . self::u16(65530);
+        }
+
+        $coverage = CoverageTable::build([2]);
+        $pair = self::u16(1) . self::u16(12) . self::u16(0x44) . self::u16(0x11)
+            . self::u16(1) . self::u16(12 + \strlen($coverage)) . $coverage
+            . self::u16($count) . $records . $device . $variation;
+        $output = GposCompactor::compact(
+            self::gpos(2, $pair),
+            GlyphIdMap::fromRetained($count + 1, array_fill_keys(range(0, $count), true)),
+        );
+        $reader = new BinaryReader($output, 'pair set with device and variation');
+        $subtables = self::pairSubtables($reader);
+        self::assertCount(2, $subtables);
+        $nextGlyph = 1;
+
+        foreach ($subtables as $subtable) {
+            self::assertSame([2], CoverageTable::parse($reader, $subtable, $reader->uint16($subtable + 2)));
+            self::assertSame([0x44, 0x11], [$reader->uint16($subtable + 4), $reader->uint16($subtable + 6)]);
+            $set = $subtable + $reader->uint16($subtable + 10);
+
+            for ($index = 0; $index < $reader->uint16($set); ++$index) {
+                $record = $set + 2 + $index * 10;
+                self::assertSame($nextGlyph++, $reader->uint16($record));
+                self::assertSame(-20, $reader->int16($record + 2));
+                self::assertSame(30, $reader->int16($record + 6));
+                self::assertSame($device, $reader->string($set + $reader->uint16($record + 4), 8));
+                self::assertSame($variation, $reader->string($set + $reader->uint16($record + 8), 6));
+            }
+        }
+
+        self::assertSame($count + 1, $nextGlyph);
+    }
+
+    /**
+     * @return list<int>
+     */
+    private static function pairSubtables(BinaryReader $reader): array
+    {
+        $list = $reader->uint16(8);
+        $lookup = $list + $reader->uint16($list + 2);
+        $subtables = [];
+
+        for ($index = 0; $index < $reader->uint16($lookup + 4); ++$index) {
+            $subtable = $lookup + $reader->uint16($lookup + 6 + $index * 2);
+
+            if (9 === $reader->uint16($lookup)) {
+                self::assertSame(2, $reader->uint16($subtable + 2));
+                $subtable += $reader->uint32($subtable + 4);
+            }
+
+            $subtables[] = $subtable;
+        }
+
+        return $subtables;
     }
 
     public function testItCompactsMarkToBasePositioning(): void

@@ -19,6 +19,7 @@ use Alto\Font\Exception\UnsupportedFontException;
 use Alto\Font\OpenType\Layout\ClassDefinitionTable;
 use Alto\Font\OpenType\Layout\CoverageTable;
 use Alto\Font\OpenType\Layout\LayoutTableDirectory;
+use Alto\Font\OpenType\Layout\LookupHeader;
 use Alto\Font\OpenType\Layout\LookupListTable;
 use Alto\Font\OpenType\Layout\LookupTable;
 
@@ -64,20 +65,14 @@ final readonly class GsubCompactor
         int $lookupCount,
         GlyphIdMap $glyphIds,
     ): LookupTable {
-        $lookupType = $reader->uint16($offset);
-        $lookupFlag = $reader->uint16($offset + 2);
-        $subtableCount = $reader->uint16($offset + 4);
-
-        if (0 === $subtableCount) {
-            throw new InvalidFontException(\sprintf('GSUB lookup %d must contain at least one subtable.', $lookupIndex));
-        }
+        $header = LookupHeader::parse($reader, $offset, 'GSUB', $lookupIndex);
+        $lookupType = $header->type;
 
         if (7 === $lookupType) {
             return self::compactExtensionLookup(
                 $reader,
                 $offset,
-                $lookupFlag,
-                $subtableCount,
+                $header,
                 $lookupIndex,
                 $lookupCount,
                 $glyphIds,
@@ -86,21 +81,15 @@ final readonly class GsubCompactor
 
         $subtables = [];
 
-        for ($index = 0; $index < $subtableCount; ++$index) {
-            $subtableOffset = $reader->uint16($offset + 6 + $index * 2);
-
-            if (0 === $subtableOffset) {
-                throw new InvalidFontException(\sprintf('GSUB lookup %d subtable offset must not be NULL.', $lookupIndex));
-            }
-
+        foreach ($header->subtableOffsets as $subtableOffset) {
             $subtable = $offset + $subtableOffset;
             $subtables[] = self::compactSubtable($reader, $lookupType, $subtable, $lookupIndex, $lookupCount, $glyphIds);
         }
 
         return new LookupTable(
             $lookupType,
-            $lookupFlag,
-            self::markFilteringSet($reader, $offset, $lookupFlag, $subtableCount),
+            $header->flag,
+            $header->markFilteringSet,
             $subtables,
         );
     }
@@ -108,8 +97,7 @@ final readonly class GsubCompactor
     private static function compactExtensionLookup(
         BinaryReader $reader,
         int $offset,
-        int $lookupFlag,
-        int $subtableCount,
+        LookupHeader $header,
         int $lookupIndex,
         int $lookupCount,
         GlyphIdMap $glyphIds,
@@ -117,13 +105,7 @@ final readonly class GsubCompactor
         $extensions = [];
         $extensionLookupType = null;
 
-        for ($index = 0; $index < $subtableCount; ++$index) {
-            $subtableOffset = $reader->uint16($offset + 6 + $index * 2);
-
-            if (0 === $subtableOffset) {
-                throw new InvalidFontException(\sprintf('GSUB lookup %d extension offset must not be NULL.', $lookupIndex));
-            }
-
+        foreach ($header->subtableOffsets as $subtableOffset) {
             $extension = $offset + $subtableOffset;
 
             if (1 !== $reader->uint16($extension)) {
@@ -155,22 +137,11 @@ final readonly class GsubCompactor
 
         return new LookupTable(
             $extensionLookupType ?? 0,
-            $lookupFlag,
-            self::markFilteringSet($reader, $offset, $lookupFlag, $subtableCount),
+            $header->flag,
+            $header->markFilteringSet,
             $extensions,
             true,
         );
-    }
-
-    private static function markFilteringSet(
-        BinaryReader $reader,
-        int $offset,
-        int $lookupFlag,
-        int $subtableCount,
-    ): ?int {
-        return 0 === ($lookupFlag & 0x0010)
-            ? null
-            : $reader->uint16($offset + 6 + $subtableCount * 2);
     }
 
     private static function compactSubtable(
