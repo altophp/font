@@ -18,6 +18,7 @@ use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\Exception\UnsupportedFontException;
 use Alto\Font\OpenType\Layout\ClassDefinitionTable;
 use Alto\Font\OpenType\Layout\CoverageTable;
+use Alto\Font\OpenType\Layout\DeviceTable;
 use Alto\Font\OpenType\Layout\LayoutTableDirectory;
 use Alto\Font\OpenType\Layout\LookupListTable;
 use Alto\Font\OpenType\Layout\LookupTable;
@@ -309,7 +310,7 @@ final readonly class GposCompactor
                 . $value
                 . $coverageData;
 
-            return self::appendDevices($table, $devices);
+            return DeviceTable::append($table, $devices);
         }
 
         $valueCount = $reader->uint16($offset + 6);
@@ -351,7 +352,7 @@ final readonly class GposCompactor
             . $values
             . $coverageData;
 
-        return self::appendDevices($table, $devices);
+        return DeviceTable::append($table, $devices);
     }
 
     private static function compactContext(
@@ -1011,7 +1012,7 @@ final readonly class GposCompactor
             }
 
             $firstGlyphs[] = $newFirstGlyphId;
-            $pairSets[] = self::appendDevices(
+            $pairSets[] = DeviceTable::append(
                 self::uint16($recordCount) . $records,
                 $pairSetDevices,
             );
@@ -1400,7 +1401,7 @@ final readonly class GposCompactor
             . $classDefinitionData2;
 
         try {
-            return self::appendDevices($table, $devices);
+            return DeviceTable::append($table, $devices);
         } catch (UnsupportedFontException) {
             return null;
         }
@@ -1521,7 +1522,7 @@ final readonly class GposCompactor
         int $valueFormat1,
         int $valueFormat2,
     ): string {
-        $pairSet = self::appendDevices(self::uint16($recordCount) . $records, $devices);
+        $pairSet = DeviceTable::append(self::uint16($recordCount) . $records, $devices);
 
         return self::buildPairFormatOne([$firstGlyphId], [$pairSet], $valueFormat1, $valueFormat2);
     }
@@ -1892,12 +1893,12 @@ final readonly class GposCompactor
                 $devices[] = [
                     'offset' => $patchOffset,
                     'base' => 0,
-                    'data' => self::deviceTable($reader, $offset + $deviceOffset, $lookupIndex),
+                    'data' => DeviceTable::copy($reader, $offset + $deviceOffset),
                 ];
             }
         }
 
-        return self::appendDevices($anchor, $devices);
+        return DeviceTable::append($anchor, $devices);
     }
 
     private static function valueRecordLength(int $format, int $lookupIndex): int
@@ -1953,55 +1954,12 @@ final readonly class GposCompactor
                 $devices[] = [
                     'offset' => $patchOffset,
                     'base' => 0,
-                    'data' => self::deviceTable($reader, $subtableOffset + $deviceOffset, $lookupIndex),
+                    'data' => DeviceTable::copy($reader, $subtableOffset + $deviceOffset),
                 ];
             }
         }
 
         return [$data, $devices];
-    }
-
-    private static function deviceTable(BinaryReader $reader, int $offset, int $lookupIndex): string
-    {
-        $startSize = $reader->uint16($offset);
-        $endSize = $reader->uint16($offset + 2);
-        $format = $reader->uint16($offset + 4);
-
-        if (0x8000 === $format) {
-            return $reader->string($offset, 6);
-        }
-
-        if (!\in_array($format, [1, 2, 3], true) || $endSize < $startSize) {
-            throw new InvalidFontException(\sprintf('GPOS lookup %d device table is invalid.', $lookupIndex));
-        }
-
-        $bitsPerValue = 1 << $format;
-        $wordCount = intdiv(($endSize - $startSize + 1) * $bitsPerValue + 15, 16);
-
-        return $reader->string($offset, 6 + $wordCount * 2);
-    }
-
-    /**
-     * @param list<array{offset: int, base: int, data: string}> $devices
-     */
-    private static function appendDevices(string $table, array $devices): string
-    {
-        $offsetsByData = [];
-
-        foreach ($devices as $device) {
-            $deviceOffset = $offsetsByData[$device['data']] ?? null;
-
-            if (null === $deviceOffset) {
-                $deviceOffset = \strlen($table);
-                $offsetsByData[$device['data']] = $deviceOffset;
-                $table .= $device['data'];
-            }
-
-            $relativeOffset = $deviceOffset - $device['base'];
-            $table = substr_replace($table, self::offset16($relativeOffset), $device['offset'], 2);
-        }
-
-        return $table;
     }
 
     /**

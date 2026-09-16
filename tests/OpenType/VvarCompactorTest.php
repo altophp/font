@@ -63,6 +63,30 @@ final class VvarCompactorTest extends TestCase
         self::assertSame(0, $reader->uint32(20));
     }
 
+    public function testItRemapsSharedDeltaSetIndexMaps(): void
+    {
+        $vvar = self::vvar(self::itemVariationStore(), advance: self::map([[0, 1], [0, 2], [0, 3]]));
+        $vvar = substr_replace($vvar, substr($vvar, 8, 4), 12, 4);
+        $vvar = substr_replace($vvar, substr($vvar, 8, 4), 16, 4);
+        $reader = new BinaryReader(self::compact($vvar, GlyphIdMap::fromRetained(3, [2 => true])), 'shared VVAR maps');
+
+        foreach ([8, 12, 16] as $field) {
+            self::assertSame([[0, 1], [0, 3]], self::readMap($reader, $reader->uint32($field)));
+        }
+    }
+
+    public function testItPreservesSharedItemVariationData(): void
+    {
+        $original = self::itemVariationStore();
+        $store = self::u16(1) . self::u32(16) . self::u16(2)
+            . self::u32(26) . self::u32(26) . substr($original, 12);
+        $vvar = self::vvar($store, advance: self::map([[0, 1], [1, 2], [1, 3]]));
+        $reader = new BinaryReader(self::compact($vvar, GlyphIdMap::fromRetained(3, [2 => true])), 'shared VVAR data');
+
+        self::assertSame($store, $reader->string(24, \strlen($store)));
+        self::assertSame([[0, 1], [1, 3]], self::readMap($reader, $reader->uint32(8)));
+    }
+
     public function testItCanonicalizesSafePhysicalMappingOrder(): void
     {
         $store = self::itemVariationStore();
@@ -157,12 +181,12 @@ final class VvarCompactorTest extends TestCase
         self::compact($vvar, GlyphIdMap::fromRetained(2, [1 => true]));
     }
 
-    public function testItRejectsUnsupportedMappingFormats(): void
+    public function testItRejectsInvalidMappingFormats(): void
     {
         $vvar = self::vvar(self::itemVariationStore(), advance: "\x02\0\0\0");
 
-        $this->expectException(UnsupportedFontException::class);
-        $this->expectExceptionMessage('mapping supports formats 0 and 1 only');
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('Unsupported DeltaSetIndexMap format 2');
 
         self::compact($vvar, GlyphIdMap::fromRetained(2, [1 => true]));
     }
@@ -172,7 +196,7 @@ final class VvarCompactorTest extends TestCase
         $vvar = self::vvar(self::itemVariationStore(), advance: "\0\x40\0\1\0");
 
         $this->expectException(InvalidFontException::class);
-        $this->expectExceptionMessage('mapping entry format is invalid');
+        $this->expectExceptionMessage('entry format uses reserved bits');
 
         self::compact($vvar, GlyphIdMap::fromRetained(2, [1 => true]));
     }
@@ -182,7 +206,7 @@ final class VvarCompactorTest extends TestCase
         $vvar = self::vvar(self::itemVariationStore(), advance: "\0\0\0\0");
 
         $this->expectException(InvalidFontException::class);
-        $this->expectExceptionMessage('mapping must contain at least one entry');
+        $this->expectExceptionMessage('must contain at least one entry');
 
         self::compact($vvar, GlyphIdMap::fromRetained(2, [1 => true]));
     }
@@ -192,7 +216,7 @@ final class VvarCompactorTest extends TestCase
         $vvar = self::vvar(self::itemVariationStore(), advance: "\0\x10\0\2\0");
 
         $this->expectException(InvalidFontException::class);
-        $this->expectExceptionMessage('mapping length is invalid');
+        $this->expectExceptionMessage('DeltaSetIndexMap length is invalid');
 
         self::compact($vvar, GlyphIdMap::fromRetained(2, [1 => true]));
     }
@@ -202,7 +226,7 @@ final class VvarCompactorTest extends TestCase
         $vvar = self::vvar(self::itemVariationStore(), advance: "\0");
 
         $this->expectException(InvalidFontException::class);
-        $this->expectExceptionMessage('mapping length is invalid');
+        $this->expectExceptionMessage('DeltaSetIndexMap length is invalid');
 
         self::compact($vvar, GlyphIdMap::fromRetained(2, [1 => true]));
     }
@@ -211,10 +235,10 @@ final class VvarCompactorTest extends TestCase
     {
         $vvar = self::vvar(
             self::itemVariationStore(),
-            advance: self::map([[0, 1]]),
-            top: self::map([[0, 2]]),
+            advance: "\0\0\0\x08\0\0\0\x01\0\0\0\0",
         );
-        $vvar = substr_replace($vvar, substr($vvar, 8, 4), 12, 4);
+        $advanceOffset = (new BinaryReader($vvar, 'overlapping VVAR'))->uint32(8);
+        $vvar = substr_replace($vvar, self::u32($advanceOffset + 4), 12, 4);
 
         $this->expectException(InvalidFontException::class);
         $this->expectExceptionMessage('delta-set mappings overlap');
@@ -224,10 +248,10 @@ final class VvarCompactorTest extends TestCase
 
     public function testItRejectsItemVariationStoreDataThatOverlapsMappings(): void
     {
-        $store = self::itemVariationStore();
-        $vvar = self::vvar($store, advance: self::map([[0, 1]]));
-        $dataOffset = 24 + 8;
-        $vvar = substr_replace($vvar, self::u32(\strlen($store) - 2), $dataOffset, 4);
+        $vvar = self::vvar(self::itemVariationStore());
+        $mappingOffset = 24 + 22 + 8;
+        $vvar = substr_replace($vvar, "\0\0\0\x01\0", $mappingOffset, 5);
+        $vvar = substr_replace($vvar, self::u32($mappingOffset), 8, 4);
 
         $this->expectException(InvalidFontException::class);
         $this->expectExceptionMessage('overlaps a delta-set mapping');
@@ -259,7 +283,8 @@ final class VvarCompactorTest extends TestCase
 
         $compacted = self::compact($vvar, GlyphIdMap::fromRetained(2, [1 => true]));
 
-        self::assertSame($store, substr($compacted, 24, \strlen($store)));
+        self::assertSame(substr($store, 0, 22), substr($compacted, 24, 22));
+        self::assertSame(46, (new BinaryReader($compacted, 'NULL data compacted VVAR'))->uint32(8));
     }
 
     public function testItRejectsAxisCountsThatDifferFromFvar(): void
@@ -274,14 +299,26 @@ final class VvarCompactorTest extends TestCase
         );
     }
 
-    public function testItRejectsLongDeltaWords(): void
+    public function testItPreservesLongDeltaWords(): void
     {
         $store = substr_replace(self::itemVariationStore(), self::u16(0x8001), 24, 2);
+        $store = substr($store, 0, 30) . str_repeat(self::u32(70000), 32);
+        $compacted = self::compact(self::vvar($store), GlyphIdMap::fromRetained(2, [1 => true]));
 
-        $this->expectException(UnsupportedFontException::class);
-        $this->expectExceptionMessage('does not support 32-bit delta words');
+        self::assertSame($store, substr($compacted, 24, \strlen($store)));
+    }
 
-        self::compact(self::vvar($store), GlyphIdMap::fromRetained(2, [1 => true]));
+    public function testItAcceptsMappingsInsideVariationStoreGaps(): void
+    {
+        $store = self::itemVariationStore();
+        $map = self::map([[0, 1], [0, 2]]);
+        $interleavedStore = substr_replace($store, self::u32(12 + \strlen($map)), 2, 4);
+        $interleavedStore = substr_replace($interleavedStore, self::u32(22 + \strlen($map)), 8, 4);
+        $interleavedStore = substr($interleavedStore, 0, 12) . $map . substr($interleavedStore, 12);
+        $vvar = substr_replace(self::vvar($interleavedStore), self::u32(36), 8, 4);
+        $glyphIds = GlyphIdMap::fromRetained(2, [1 => true]);
+
+        self::assertSame(self::compact(self::vvar($store, advance: $map), $glyphIds), self::compact($vvar, $glyphIds));
     }
 
     /**

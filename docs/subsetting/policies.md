@@ -36,17 +36,28 @@ and vertical metrics, compound, GSUB, GPOS, GDEF, legacy `kern` format 0,
 `gvar`, HVAR, and VVAR mapping structures. Any glyph-indexed table that cannot
 be rewritten causes an explicit rejection.
 
-GSUB compaction covers lookup types 1 through 8, including extension lookups.
-GPOS compaction covers lookup types 1 through 9, with type 9 used for extension
-lookups. OpenType Layout 1.1 feature variations are preserved. Positioning
-records retain valid Device and VariationIndex data while their offsets are
-relocated. Non-NULL feature parameters are supported for `size`, `ss01`
-through `ss20`, and `cv01` through `cv99`; unknown parameter formats are
-rejected explicitly. Oversized PairPos format 1 data is split across lookup
-subtables. PairPos format 2 removes unused classes and splits class rows when
-its internal 16-bit offsets would overflow. A row that still cannot fit is
-expanded into format 1 glyph-pair records, split across subtables as needed.
-Implicit class 0 and Device or VariationIndex adjustments are preserved.
+GSUB compaction handles lookup types 1 through 8, including extension lookups.
+GPOS compaction handles lookup types 1 through 9, with type 9 used for extension
+lookups. Support for every lookup type does not imply support for every valid
+font: the restrictions below still apply. OpenType Layout 1.1 feature
+variations are preserved. GPOS positioning records retain valid Device and
+VariationIndex data while their offsets are relocated. Non-NULL feature
+parameters are supported for `size`, `ss01` through `ss20`, and `cv01` through
+`cv99`; unknown parameter formats are rejected explicitly.
+
+Oversized PairPos format 1 data is split between existing PairSets across
+lookup subtables. A single existing PairSet that cannot fit within the output
+subtable's 16-bit offsets is rejected; it is not split internally. PairPos
+format 2 removes unused classes and splits class rows when its internal
+16-bit offsets would overflow. A row that still cannot fit is expanded into
+format 1 glyph-pair records, split across subtables as needed. Implicit class
+0 and Device or VariationIndex adjustments are preserved. Other layout
+structures can still exceed their offset limits and be rejected.
+
+GDEF ligature caret values support formats 1, 2 and 3. Format 3 retains Device
+or VariationIndex adjustments while relocating their offsets. The shared
+variation store is rebuilt from its referenced structures, so it need not be
+the final top-level subtable in the source GDEF table.
 
 ## Remove hinting
 
@@ -81,8 +92,15 @@ Supported variable TrueType subsets preserve all axes. Compact mode remaps
 per-glyph `gvar` blocks and HVAR mappings while preserving supported axis data.
 When `vhea` and `vmtx` are present, their glyph metrics are remapped together;
 VVAR mappings are also remapped when present. The HVAR and VVAR
-`ItemVariationStore` data is preserved rather than reduced. This is not static
-instancing or axis-range reduction.
+`ItemVariationStore` delta sets and their indexes are preserved. Their physical
+layout is rebuilt without unrelated bytes or padding; unused delta sets are
+not removed. This is not static instancing or axis-range reduction.
+
+HVAR and VVAR mappings can precede or follow the variation store, including
+gaps between its referenced structures. Shared mapping and variation-data
+references are supported; overlapping structures are rejected. The store
+copier preserves both ordinary and long-word delta encodings. This does not
+extend support to other tables such as COLR that use long-word deltas.
 
 A view created with `withVariations()` cannot be subsetted. Return to the
 variable source with `withoutVariations()` first.
