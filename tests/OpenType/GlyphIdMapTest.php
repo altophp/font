@@ -26,6 +26,7 @@ final class GlyphIdMapTest extends TestCase
         $mapping = GlyphIdMap::fromRetained(8, [5 => true, 2 => true, 7 => true]);
 
         self::assertCount(4, $mapping);
+        self::assertSame(8, $mapping->sourceGlyphCount());
         self::assertSame(0, $mapping->newId(0));
         self::assertSame(1, $mapping->newId(2));
         self::assertSame(2, $mapping->newId(5));

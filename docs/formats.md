@@ -12,7 +12,7 @@ extension.
 | WOFF2 | Supported | Reading requires `ext-brotli` or the `brotli` executable; writing requires an explicit compressor |
 | TTC and OTC collections | Supported | Select a face with `faceIndex` |
 | WOFF2 collections | Not supported | Rejected explicitly |
-| Variable `glyf` fonts | Supported | Includes `fvar`, `avar`, `gvar`, and `HVAR` |
+| Variable `glyf` fonts | Supported | Includes `fvar`, `avar`, `gvar`, and `HVAR`; compact subsets can remap `VVAR` with `vhea` and `vmtx` |
 | Color glyphs | Not supported | COLR, CPAL, SVG, sbix, CBDT, and CBLC are not rendered |
 
 ## Font collections

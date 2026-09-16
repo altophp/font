@@ -594,7 +594,7 @@ final class FontTest extends TestCase
         self::assertContains('gvar', $result->font->face()->tables);
         self::assertContains('HVAR', $result->font->face()->tables);
         self::assertContains(
-            'Variable glyph and horizontal-metric mappings were compacted; axes and axis metadata were preserved.',
+            'Variable glyph and metric mappings were compacted; axes and axis metadata were preserved.',
             $result->warnings,
         );
     }

@@ -15,7 +15,6 @@ namespace Alto\Font\Tests\OpenType;
 
 use Alto\Font\Binary\BinaryReader;
 use Alto\Font\Exception\InvalidFontException;
-use Alto\Font\Exception\UnsupportedFontException;
 use Alto\Font\Font;
 use Alto\Font\Glyph\GlyphId;
 use Alto\Font\OpenType\GlyfCompactor;
@@ -108,15 +107,57 @@ final class GlyfCompactorTest extends TestCase
         self::assertSame(700, $selected->metrics('A')->advanceWidth);
     }
 
-    public function testItRejectsTablesWhoseGlyphIdsCannotBeRemapped(): void
+    public function testItCompactsLegacyKerningPairs(): void
     {
         $path = self::temporaryPath('kern.ttf');
-        TinyTrueTypeFont::writeWithTable($path, 'kern');
+        TinyTrueTypeFont::writeWithKern($path);
 
-        $this->expectException(UnsupportedFontException::class);
-        $this->expectExceptionMessage('requires rewriting SFNT table "kern"');
+        $result = self::compact($path, 'Á');
+        $kern = $result->font->sfntDocument()->table('kern');
+        self::assertNotNull($kern);
+        $reader = new BinaryReader($kern, 'compacted kern');
 
-        self::compact($path, 'A');
+        self::assertSame(1, $reader->uint16(10));
+        self::assertSame([1, 2, -20], [
+            $reader->uint16(18),
+            $reader->uint16(20),
+            $reader->int16(22),
+        ]);
+        self::assertContains('Legacy kern pairs were compacted with remapped glyph IDs.', $result->warnings);
+    }
+
+    public function testItCompactsVerticalMetricsAndVariationMappingsTogether(): void
+    {
+        $path = self::temporaryPath('vvar.ttf');
+        TinyTrueTypeFont::writeVariableWithVvar($path);
+
+        $result = self::compact($path, 'V');
+        $document = $result->font->sfntDocument();
+        $vhea = $document->table('vhea');
+        $vmtx = $document->table('vmtx');
+        $vvar = $document->table('VVAR');
+
+        self::assertNotNull($vhea);
+        self::assertNotNull($vmtx);
+        self::assertNotNull($vvar);
+        self::assertSame(2, (new BinaryReader($vhea, 'compacted vhea'))->uint16(34));
+        self::assertSame(8, \strlen($vmtx));
+        $vvarReader = new BinaryReader($vvar, 'compacted VVAR');
+        self::assertSame(2, $vvarReader->uint16($vvarReader->uint32(8) + 2));
+        self::assertContains('Vertical metrics were compacted with remapped glyph IDs.', $result->warnings);
+        self::assertContains('VVAR vertical-metric mappings were compacted; its ItemVariationStore was preserved.', $result->warnings);
+    }
+
+    public function testItRequiresVerticalHeaderAndMetricsTogether(): void
+    {
+        $vhea = str_repeat("\0", 36);
+        $vhea = substr_replace($vhea, "\0\1\x10\0", 0, 4);
+        $vhea = substr_replace($vhea, "\0\5", 34, 2);
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('require vhea and vmtx together');
+
+        self::compactDirect(self::fontPath(), ['vhea' => $vhea]);
     }
 
     public function testItRejectsTruncatedCoreTables(): void
