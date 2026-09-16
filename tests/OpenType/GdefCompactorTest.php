@@ -207,6 +207,191 @@ final class GdefCompactorTest extends TestCase
         GdefCompactor::compact($gdef, GlyphIdMap::fromRetained(2, [1 => true]));
     }
 
+    #[DataProvider('overlappingSourceStructures')]
+    public function testItRejectsOverlappingSourceStructures(string $gdef): void
+    {
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('overlaps');
+
+        GdefCompactor::compact($gdef, GlyphIdMap::fromRetained(4, [1 => true, 2 => true]));
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function overlappingSourceStructures(): iterable
+    {
+        yield 'attachment point overlaps parent offset array' => [
+            self::gdefWith(attachList: pack('n*', 8, 1, 4, 1, 1, 1, 2)),
+        ];
+        yield 'ligature glyph overlaps parent offset array' => [
+            self::gdefWith(ligatureCarets: pack('n*', 14, 1, 4, 14, 14, 14, 14, 1, 1, 1, 300)),
+        ];
+        yield 'caret value overlaps parent offset array' => [
+            self::gdefWith(ligatureCarets: self::coverageRecordList([1], [pack('n*', 1, 2, 300)])),
+        ];
+        yield 'subtable overlaps GDEF header' => [
+            pack('n*', 1, 2, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0),
+        ];
+    }
+
+    public function testItRejectsCoverageOverlappingAParentOffsetArray(): void
+    {
+        $gdef = self::gdefWith(attachList: pack('n*', 4, 1, 1, 1, 2));
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('overlaps');
+
+        GdefCompactor::compact($gdef, GlyphIdMap::fromRetained(3, []));
+    }
+
+    #[DataProvider('unorderedAttachmentPoints')]
+    public function testItRejectsUnorderedAttachmentPointIndices(string $points): void
+    {
+        $gdef = self::gdefWith(attachList: self::coverageRecordList([1], [$points]));
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('indices must be strictly increasing');
+
+        GdefCompactor::compact($gdef, GlyphIdMap::fromRetained(2, [1 => true]));
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function unorderedAttachmentPoints(): iterable
+    {
+        yield 'decreasing' => [pack('n*', 2, 2, 1)];
+        yield 'duplicate zero' => [pack('n*', 2, 0, 0)];
+        yield 'duplicate nonzero' => [pack('n*', 2, 3, 3)];
+    }
+
+    public function testItRejectsMalformedAttachmentRecordsForDiscardedGlyphs(): void
+    {
+        $gdef = self::gdefWith(attachList: pack('n*', 6, 1, 0, 1, 1, 2));
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('attachment point offset must not be NULL');
+
+        GdefCompactor::compact($gdef, GlyphIdMap::fromRetained(3, []));
+    }
+
+    public function testItPreservesSharedAttachmentPointsAndReorderedCoverage(): void
+    {
+        // Both glyphs reference the same point list. Coverage precedes the points.
+        $attachList = pack('n*', 8, 2, 16, 16, 1, 2, 1, 2, 1, 7);
+        $reader = new BinaryReader(
+            GdefCompactor::compact(self::gdefWith(attachList: $attachList), GlyphIdMap::fromRetained(3, [1 => true, 2 => true])),
+            'shared GDEF attachments',
+        );
+        $list = $reader->uint16(6);
+        self::assertSame([1, 2], CoverageTable::parse($reader, $list, $reader->uint16($list)));
+
+        foreach ([4, 6] as $field) {
+            $points = $list + $reader->uint16($list + $field);
+            self::assertSame(pack('n*', 1, 7), $reader->string($points, 4));
+        }
+    }
+
+    public function testItPreservesSharedCaretsAndMarkCoverages(): void
+    {
+        $ligatures = self::coverageRecordList([1], [pack('n*', 2, 6, 6, 1, 300)]);
+        $marks = pack('n*', 1, 2) . pack('N*', 12, 12) . CoverageTable::build([1]);
+        $reader = new BinaryReader(
+            GdefCompactor::compact(self::gdefWith(ligatureCarets: $ligatures, markGlyphSets: $marks), GlyphIdMap::fromRetained(2, [1 => true])),
+            'shared GDEF carets',
+        );
+        $list = $reader->uint16(8);
+        $ligature = $list + $reader->uint16($list + 4);
+        self::assertSame(2, $reader->uint16($ligature));
+
+        foreach ([2, 4] as $field) {
+            self::assertSame(pack('n*', 1, 300), $reader->string($ligature + $reader->uint16($ligature + $field), 4));
+        }
+
+        $markSets = $reader->uint16(12);
+        self::assertSame([1], CoverageTable::parse($reader, $markSets, $reader->uint32($markSets + 4)));
+        self::assertSame([1], CoverageTable::parse($reader, $markSets, $reader->uint32($markSets + 8)));
+    }
+
+    public function testItPreservesClassDefinitionsSharedBetweenGlyphAndMarkClasses(): void
+    {
+        $classes = ClassDefinitionTable::build([1 => 2]);
+        $gdef = pack('n*', 1, 0, 12, 0, 0, 12) . $classes;
+        $reader = new BinaryReader(GdefCompactor::compact($gdef, GlyphIdMap::fromRetained(2, [1 => true])), 'shared classes');
+
+        self::assertSame([1 => 2], ClassDefinitionTable::parse($reader, 0, $reader->uint16(4)));
+        self::assertSame([1 => 2], ClassDefinitionTable::parse($reader, 0, $reader->uint16(10)));
+    }
+
+    public function testItPreservesCoverageSharedAcrossAttachmentAndLigatureLists(): void
+    {
+        // The lists have different bases and share the coverage after both lists.
+        $gdef = pack('n*', 1, 0, 0, 12, 22, 0)
+            . pack('n*', 24, 1, 6, 1, 3)
+            . pack('n*', 14, 1, 6, 1, 4, 1, 300)
+            . CoverageTable::build([1]);
+        $reader = new BinaryReader(GdefCompactor::compact($gdef, GlyphIdMap::fromRetained(2, [1 => true])), 'shared coverage');
+
+        foreach ([6, 8] as $field) {
+            $list = $reader->uint16($field);
+            self::assertSame([1], CoverageTable::parse($reader, $list, $reader->uint16($list)));
+        }
+    }
+
+    #[DataProvider('caretAdjustments')]
+    public function testItPreservesSharedCaretAdjustments(string $device): void
+    {
+        $ligature = pack('n*', 2, 6, 12, 3, 100, 12, 3, 300, 6) . $device;
+        $reader = new BinaryReader(
+            GdefCompactor::compact(
+                self::gdefWith(ligatureCarets: self::coverageRecordList([1], [$ligature])),
+                GlyphIdMap::fromRetained(2, [1 => true]),
+            ),
+            'shared caret adjustment',
+        );
+        $list = $reader->uint16(8);
+        $glyph = $list + $reader->uint16($list + 4);
+
+        foreach ([2, 4] as $field) {
+            $caret = $glyph + $reader->uint16($glyph + $field);
+            $adjustment = $caret + $reader->uint16($caret + 4);
+            self::assertSame($device, $reader->string($adjustment, \strlen($device)));
+        }
+    }
+
+    public function testItPreservesCompatibleSharedBytesBetweenSiblingStructures(): void
+    {
+        // OpenType does not require disjoint sibling payloads. These bytes are
+        // independently valid as both a coverage and an attachment point list.
+        $gdef = self::gdefWith(attachList: pack('n*', 6, 1, 6, 1, 1, 2));
+        $reader = new BinaryReader(GdefCompactor::compact($gdef, GlyphIdMap::fromRetained(3, [2 => true])), 'shared sibling bytes');
+        $list = $reader->uint16(6);
+        self::assertSame([1], CoverageTable::parse($reader, $list, $reader->uint16($list)));
+        self::assertSame(pack('n*', 1, 1), $reader->string($list + $reader->uint16($list + 4), 4));
+    }
+
+    public function testItValidatesDiscardedSharedCaretsWithoutSerializingThem(): void
+    {
+        // This large but valid glyph shares one caret among all entries. Expanding
+        // its aliases would overflow output offsets, but the glyph is discarded.
+        $count = 32766;
+        $ligature = self::u16($count) . str_repeat(self::u16(2 + $count * 2), $count) . pack('n*', 1, 300);
+        $list = pack('n*', 6, 1, 12) . CoverageTable::build([1]) . $ligature;
+        $gdef = pack('n*', 1, 0, 0, 0, 12, 0) . $list;
+        $reader = new BinaryReader(GdefCompactor::compact($gdef, GlyphIdMap::fromRetained(2, [])), 'discarded shared carets');
+        $listOffset = $reader->uint16(8);
+
+        self::assertSame(0, $reader->uint16($listOffset + 2));
+        self::assertSame([], CoverageTable::parse($reader, $listOffset, $reader->uint16($listOffset)));
+    }
+
+    public function testItRejectsMalformedCaretsForDiscardedGlyphs(): void
+    {
+        $ligatures = self::coverageRecordList([1], [pack('n*', 1, 0)]);
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('caret value offset must not be NULL');
+
+        GdefCompactor::compact(self::gdefWith(ligatureCarets: $ligatures), GlyphIdMap::fromRetained(2, []));
+    }
+
     public function testItRejectsInvalidCaretAdjustmentOffsets(): void
     {
         $caret = pack('n*', 3, 300, 2);

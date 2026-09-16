@@ -46,6 +46,14 @@ final readonly class GdefCompactor
             2 => 14,
             3 => 18,
         };
+        foreach ([4, 6, 8, 10, ...($minorVersion >= 2 ? [12] : [])] as $field) {
+            $subtableOffset = $reader->uint16($field);
+
+            if (0 !== $subtableOffset && $subtableOffset < $headerLength) {
+                throw new InvalidFontException('GDEF subtable overlaps the table header.');
+            }
+        }
+
         $itemVariationStore = null;
         $storeRanges = [];
 
@@ -151,8 +159,9 @@ final readonly class GdefCompactor
             return null;
         }
 
-        $coverage = CoverageTable::parse($reader, $offset, $reader->uint16($offset));
         $glyphCount = $reader->uint16($offset + 2);
+        $headerLength = 4 + $glyphCount * 2;
+        $coverage = self::coverage($reader, $offset, $reader->uint16($offset), $headerLength);
 
         if ($glyphCount !== \count($coverage)) {
             throw new InvalidFontException('GDEF attachment count does not match coverage.');
@@ -162,21 +171,33 @@ final readonly class GdefCompactor
         $points = [];
 
         foreach ($coverage as $index => $oldGlyphId) {
-            $newGlyphId = $glyphIds->newId($oldGlyphId);
-
-            if (null === $newGlyphId) {
-                continue;
-            }
-
             $pointOffset = $reader->uint16($offset + 4 + $index * 2);
 
             if (0 === $pointOffset) {
                 throw new InvalidFontException('GDEF attachment point offset must not be NULL.');
             }
 
+            self::assertChildOffset($pointOffset, $headerLength);
             $pointCount = $reader->uint16($offset + $pointOffset);
-            $newCoverage[] = $newGlyphId;
-            $points[] = $reader->string($offset + $pointOffset, 2 + $pointCount * 2);
+            $pointData = $reader->string($offset + $pointOffset, 2 + $pointCount * 2);
+            $previousPoint = -1;
+
+            for ($point = 0; $point < $pointCount; ++$point) {
+                $pointIndex = $reader->uint16($offset + $pointOffset + 2 + $point * 2);
+
+                if ($pointIndex <= $previousPoint) {
+                    throw new InvalidFontException('GDEF attachment point indices must be strictly increasing.');
+                }
+
+                $previousPoint = $pointIndex;
+            }
+
+            $newGlyphId = $glyphIds->newId($oldGlyphId);
+
+            if (null !== $newGlyphId) {
+                $newCoverage[] = $newGlyphId;
+                $points[] = $pointData;
+            }
         }
 
         return self::coverageRecordList($newCoverage, $points);
@@ -191,8 +212,9 @@ final readonly class GdefCompactor
             return null;
         }
 
-        $coverage = CoverageTable::parse($reader, $offset, $reader->uint16($offset));
         $ligatureCount = $reader->uint16($offset + 2);
+        $headerLength = 4 + $ligatureCount * 2;
+        $coverage = self::coverage($reader, $offset, $reader->uint16($offset), $headerLength);
 
         if ($ligatureCount !== \count($coverage)) {
             throw new InvalidFontException('GDEF ligature caret count does not match coverage.');
@@ -202,26 +224,26 @@ final readonly class GdefCompactor
         $ligatures = [];
 
         foreach ($coverage as $index => $oldGlyphId) {
-            $newGlyphId = $glyphIds->newId($oldGlyphId);
-
-            if (null === $newGlyphId) {
-                continue;
-            }
-
             $ligatureOffset = $reader->uint16($offset + 4 + $index * 2);
 
             if (0 === $ligatureOffset) {
                 throw new InvalidFontException('GDEF ligature glyph offset must not be NULL.');
             }
 
-            $newCoverage[] = $newGlyphId;
-            $ligatures[] = self::compactLigatureGlyph($reader, $offset + $ligatureOffset);
+            self::assertChildOffset($ligatureOffset, $headerLength);
+            $newGlyphId = $glyphIds->newId($oldGlyphId);
+            $ligature = self::compactLigatureGlyph($reader, $offset + $ligatureOffset, null !== $newGlyphId);
+
+            if (null !== $newGlyphId) {
+                $newCoverage[] = $newGlyphId;
+                $ligatures[] = $ligature;
+            }
         }
 
         return self::coverageRecordList($newCoverage, $ligatures);
     }
 
-    private static function compactLigatureGlyph(BinaryReader $reader, int $offset): string
+    private static function compactLigatureGlyph(BinaryReader $reader, int $offset, bool $retain): string
     {
         $caretCount = $reader->uint16($offset);
         $carets = [];
@@ -233,17 +255,23 @@ final readonly class GdefCompactor
                 throw new InvalidFontException('GDEF caret value offset must not be NULL.');
             }
 
+            self::assertChildOffset($caretOffset, 2 + $caretCount * 2);
             $caret = $offset + $caretOffset;
             $format = $reader->uint16($caret);
 
-            $carets[] = match ($format) {
+            $data = match ($format) {
                 1, 2 => $reader->string($caret, 4),
                 3 => self::compactAdjustedCaret($reader, $caret),
                 default => throw new InvalidFontException(\sprintf('GDEF caret value format %d is invalid.', $format)),
             };
+
+            if ($retain) {
+                $carets[] = $data;
+            }
         }
 
-        return self::offsetList($carets);
+        // Validate discarded records without expanding their shared offsets.
+        return $retain ? self::offsetList($carets) : '';
     }
 
     private static function compactAdjustedCaret(BinaryReader $reader, int $offset): string
@@ -289,7 +317,7 @@ final readonly class GdefCompactor
                 throw new InvalidFontException('GDEF mark glyph set coverage offset must not be NULL.');
             }
 
-            $coverage = CoverageTable::parse($reader, $offset, $coverageOffset);
+            $coverage = self::coverage($reader, $offset, $coverageOffset, 4 + $count * 4);
             $remapped = [];
 
             foreach ($coverage as $oldGlyphId) {
@@ -315,6 +343,23 @@ final readonly class GdefCompactor
         }
 
         return $header . $data;
+    }
+
+    /**
+     * @return list<int>
+     */
+    private static function coverage(BinaryReader $reader, int $base, int $relativeOffset, int $headerLength): array
+    {
+        self::assertChildOffset($relativeOffset, $headerLength);
+
+        return CoverageTable::parse($reader, $base, $relativeOffset);
+    }
+
+    private static function assertChildOffset(int $offset, int $headerLength): void
+    {
+        if ($offset < $headerLength) {
+            throw new InvalidFontException('GDEF child table overlaps its parent header or offset array.');
+        }
     }
 
     /**
