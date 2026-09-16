@@ -34,6 +34,10 @@ packages, using Python's standard-library `ctypes` module.
 - Two deterministic synthetic fonts with 12,001 glyphs: one forces PairPos
   format 2 row splitting; the other forces format 1 fallback and splitting
   of glyph-pair records, with a Device adjustment at 12 ppem.
+- Two additional PairPos format 1 fixtures exercise splitting an existing
+  oversized PairSet and a near-limit Device-bearing PairSet. They check both
+  value records, first-match precedence and fallback to later source subtables
+  at 0, 12 and 13 ppem, with kerning enabled and disabled.
 - A small layout font exercises contextual, reverse, multiple, alternate and
   ligature substitutions, pair and contextual positioning, cursive attachment,
   and mark-to-base, mark-to-ligature and mark-to-mark attachment.
