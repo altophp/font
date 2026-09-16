@@ -23,13 +23,15 @@ def pair_positioning(scenario):
         class_one = u16(1, 1, GLYPH_COUNT - 1) + u16(
             *(1 + glyph % 2 for glyph in range(1, GLYPH_COUNT))
         )
-        class_two = u16(2, 0)
-        matrix = u16(0, -10, -20)
+        # HarfBuzz 8.3 ignores second-glyph class 0. Use an explicit second
+        # class so this overflow fixture exercises kerning on that version too.
+        class_two = u16(2, 1, 1, GLYPH_COUNT - 1, 1)
+        matrix = u16(0, 0, 0, -10, 0, -20)
         coverage_offset = 16 + len(matrix)
         class_two_offset = coverage_offset + len(coverage)
         class_one_offset = class_two_offset + len(class_two)
         header = u16(
-            2, coverage_offset, 4, 0, class_one_offset, class_two_offset, 3, 1
+            2, coverage_offset, 4, 0, class_one_offset, class_two_offset, 3, 2
         )
         return header + matrix + coverage + class_two + class_one
 

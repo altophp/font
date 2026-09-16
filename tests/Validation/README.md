@@ -39,6 +39,12 @@ so the fixture builder is independent of the compactor. Every source must
 pass OTS before its outputs are checked. The shaping oracle also verifies
 that source kerning and the synthetic Device adjustment actually apply.
 
+The class-row fixture uses an explicit second-glyph class because HarfBuzz
+8.3, shipped by Ubuntu 24.04, ignores second-glyph class 0. It still forces
+PairPos format 2 row splitting; the fallback fixture exercises first-glyph
+class 0. Source/output comparisons and source-activity assertions remain
+strict on both older and current HarfBuzz versions.
+
 Each generated TTF, WOFF and WOFF2 file must pass OTS. HarfBuzz reads the
 sanitized SFNT output: it need not support webfont containers directly, and
 FontTools is not used to reconstruct transformed WOFF2 metrics. Comparisons
