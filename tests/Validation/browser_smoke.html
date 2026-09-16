@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ALTO font container rendering smoke</title>
+<link rel="icon" href="data:,">
+<style>
+body{margin:2rem;font:16px system-ui;color:#202020;background:#faf9f6}
+h1{font-size:1.7rem}h2{margin-top:2rem}p{max-width:75ch;line-height:1.5}
+canvas{display:block;max-width:100%;background:white;margin:0.5rem 0}
+#status{font-weight:bold}small{color:#555}
+</style>
+<h1>Font container rendering smoke</h1>
+<p>Chromium loads each original TTF and compact TTF, WOFF and WOFF2 through FontFace.
+Each row compares exact canvas pixels at 16, 32 and 48 pixels. This checks browser
+loading and horizontal rasterization; the separate HarfBuzz suite checks shaping
+and vertical layout.</p>
+<p id="status">Running</p><main id="samples"></main>
+<script>
+window.smokeResult = {state: 'running'};
+(async () => {
+  const manifest = await (await fetch('manifest.json')).json();
+  const checks = [];
+  const differences = [];
+  for (const sample of manifest.samples) {
+    const section = document.createElement('section');
+    section.innerHTML = `<h2>${sample.name}</h2>`;
+    document.querySelector('#samples').append(section);
+    const locations = sample.name === 'recursive'
+      ? ['', '"MONO" 1, "CASL" 1, "wght" 1000, "slnt" -15, "CRSV" 1',
+         '"MONO" 0.5, "CASL" 0.5, "wght" 650, "slnt" -7.5, "CRSV" 0.5'] : [''];
+    for (const [locationIndex, location] of locations.entries()) {
+      const images = [];
+      for (const extension of ['source.ttf', 'ttf', 'woff', 'woff2']) {
+        const family = `smoke_${sample.name}_${locationIndex}_${extension.replace('.', '_')}`;
+        const face = new FontFace(family, `url(${sample.name}.${extension})`,
+          location ? {variationSettings: location} : {});
+        await face.load();
+        document.fonts.add(face);
+        if (face.status !== 'loaded' || !document.fonts.check(`32px "${family}"`, sample.text))
+          throw new Error(`Font did not load: ${family}`);
+        const canvas = document.createElement('canvas');
+        canvas.width = 1100; canvas.height = 190;
+        const context = canvas.getContext('2d', {willReadFrequently: true});
+        context.direction = sample.direction;
+        context.textAlign = sample.direction === 'rtl' ? 'right' : 'left';
+        for (const [index, size] of [16, 32, 48].entries()) {
+          context.font = `${size}px "${family}"`;
+          context.fillText(sample.text, sample.direction === 'rtl' ? 1080 : 10, 35 + index * 65);
+        }
+        const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+        if (!pixels.some((value, index) => index % 4 === 3 && value > 0))
+          throw new Error(`Empty rendering: ${family}`);
+        const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', pixels)))
+          .map(value => value.toString(16).padStart(2, '0')).join('');
+        images.push(digest);
+        const label = document.createElement('small');
+        label.textContent = `${extension}${location ? ' / ' + location : ''}`;
+        section.append(label, canvas);
+      }
+      const identical = images.every(digest => digest === images[0]);
+      if (!identical) differences.push({sample: sample.name, location: location || 'default', digests: images});
+      checks.push({sample: sample.name, location: location || 'default', containers: 4, identical, digest: images[0]});
+    }
+  }
+  const variableDigests = checks.filter(check => check.sample === 'recursive').map(check => check.digest);
+  if (new Set(variableDigests).size !== 3)
+    throw new Error('Source variable font instances did not produce distinct renderings');
+  window.smokeResult = {state: differences.length ? 'failed' : 'passed', browser: navigator.userAgent, checks, differences};
+  document.querySelector('#status').textContent = `${checks.length * 3} source/output canvas comparisons completed; ${differences.length} sample instances differ`;
+})().catch(error => {
+  window.smokeResult = {state: 'failed', error: String(error)};
+  document.querySelector('#status').textContent = String(error);
+  console.error(error);
+});
+</script>
+</html>
