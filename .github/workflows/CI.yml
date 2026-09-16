@@ -59,7 +59,7 @@ jobs:
         with:
           python-version: '3.13'
       - name: Install font validation dependencies
-        run: python -m pip install --only-binary=:all: -r tests/Validation/requirements.txt
+        run: 'python -m pip install --only-binary=:all: -r tests/Validation/requirements.txt'
       - name: Install Brotli and HarfBuzz CLIs
         run: |
           sudo apt-get update
