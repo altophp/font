@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="490" viewBox="0 0 900 490" role="img" aria-labelledby="title description">
+<title id="title">Change the format, keep the characters</title>
+<desc id="description">The same complete Inter face is written as TTF, WOFF, and WOFF2. Sizes are measured from ALTO writer output, without subsetting.</desc>
+<rect width="900" height="490" fill="#fafbfe"/>
+<g font-family="Arial, Helvetica, sans-serif">
+<text x="32" y="45" font-size="28" fill="#243047">Change the format, keep the characters</text>
+<text x="32" y="85" font-size="20" fill="#5d6878">One complete Inter face / no subsetting</text>
+<rect x="32" y="179" width="260" height="156" rx="4" fill="#e9eefb"/>
+<text x="55" y="224" font-size="24" fill="#243047">Loaded font</text>
+<path d="M56.828 302.000 L75.848 249.617 L83.582 249.617 L102.848 302.000 L95.816 302.000 L84.707 270.922 Q83.688 268.039 82.334 263.732 Q80.980 259.426 79.047 252.746 L80.312 252.746 Q78.414 259.496 77.025 263.873 Q75.637 268.250 74.723 270.922 L63.930 302.000 L56.828 302.000 Z M66.391 287.375 L66.391 281.539 L93.285 281.539 L93.285 287.375 L66.391 287.375 Z" fill="#243047"/>
+<path d="M121.234 302.914 Q117.508 302.914 114.467 301.508 Q111.426 300.102 109.633 297.395 Q107.840 294.688 107.840 290.820 Q107.840 287.445 109.176 285.336 Q110.512 283.227 112.744 282.014 Q114.977 280.801 117.684 280.203 Q120.391 279.605 123.133 279.254 Q126.648 278.797 128.863 278.551 Q131.078 278.305 132.150 277.707 Q133.223 277.109 133.223 275.668 L133.223 275.457 Q133.223 272.996 132.309 271.291 Q131.395 269.586 129.566 268.672 Q127.738 267.758 124.996 267.758 Q122.184 267.758 120.180 268.637 Q118.176 269.516 116.928 270.834 Q115.680 272.152 115.047 273.523 L108.965 271.520 Q110.477 267.934 113.043 265.912 Q115.609 263.891 118.703 263.047 Q121.797 262.203 124.820 262.203 Q126.789 262.203 129.303 262.678 Q131.816 263.152 134.154 264.559 Q136.492 265.965 138.021 268.725 Q139.551 271.484 139.551 276.090 L139.551 302.000 L133.328 302.000 L133.328 296.656 L132.906 296.656 Q132.238 298.027 130.762 299.486 Q129.285 300.945 126.930 301.930 Q124.574 302.914 121.234 302.914 Z M122.324 297.324 Q125.840 297.324 128.266 295.953 Q130.691 294.582 131.957 292.385 Q133.223 290.188 133.223 287.797 L133.223 282.348 Q132.836 282.805 131.535 283.174 Q130.234 283.543 128.564 283.824 Q126.895 284.105 125.330 284.299 Q123.766 284.492 122.852 284.598 Q120.566 284.879 118.580 285.564 Q116.594 286.250 115.398 287.568 Q114.203 288.887 114.203 291.137 Q114.203 293.176 115.258 294.547 Q116.312 295.918 118.141 296.621 Q119.969 297.324 122.324 297.324 Z" fill="#243047"/>
+<path d="M 292 258 L 366 258" fill="none" stroke="#2254d7" stroke-width="1.5"/>
+<path d="M 366 145 L 366 365" fill="none" stroke="#2254d7" stroke-width="1.5"/>
+<path d="M 366 145 L 423 145" fill="none" stroke="#2254d7" stroke-width="1.5"/>
+<path d="M 413 139 L 423 145" fill="none" stroke="#2254d7" stroke-width="1.5"/>
+<path d="M 413 151 L 423 145" fill="none" stroke="#2254d7" stroke-width="1.5"/>
+<text x="450" y="137" font-size="25" fill="#243047">TTF</text>
+<text x="600" y="137" font-size="24" fill="#2254d7">66,912 bytes</text>
+<text x="450" y="169" font-size="18" fill="#5d6878">SfntWriter / no container compression</text>
+<path d="M 366 255 L 423 255" fill="none" stroke="#2254d7" stroke-width="1.5"/>
+<path d="M 413 249 L 423 255" fill="none" stroke="#2254d7" stroke-width="1.5"/>
+<path d="M 413 261 L 423 255" fill="none" stroke="#2254d7" stroke-width="1.5"/>
+<text x="450" y="247" font-size="25" fill="#243047">WOFF</text>
+<text x="600" y="247" font-size="24" fill="#2254d7">31,792 bytes</text>
+<text x="450" y="279" font-size="18" fill="#5d6878">WoffWriter / automatic Zlib</text>
+<path d="M 366 365 L 423 365" fill="none" stroke="#2254d7" stroke-width="1.5"/>
+<path d="M 413 359 L 423 365" fill="none" stroke="#2254d7" stroke-width="1.5"/>
+<path d="M 413 371 L 423 365" fill="none" stroke="#2254d7" stroke-width="1.5"/>
+<text x="450" y="357" font-size="25" fill="#243047">WOFF2</text>
+<text x="600" y="357" font-size="24" fill="#2254d7">23,300 bytes</text>
+<text x="450" y="389" font-size="18" fill="#5d6878">Woff2Writer / Brotli Maximum</text>
+<text x="32" y="460" font-size="18" fill="#5d6878">Measured for this fixture. Ratios depend on the font and compression settings.</text>
+</g>
+</svg>

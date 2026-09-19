@@ -1,49 +1,35 @@
-# ALTO Font
+# Alto Font
 
-ALTO Font loads font files, exposes their data, converts supported formats,
-compresses webfont output, and creates Unicode subsets. It does not shape text,
-apply kerning, or draw glyphs.
+ALTO Font reads, inspects, converts, and subsets TrueType-based font files from
+PHP. It exposes metadata, character coverage, glyph measurements, outlines,
+and variable-font data without changing the source file.
+
+Use it to identify a font, prepare TTF, WOFF, or WOFF2 output, or create a
+smaller font containing the characters an application needs. Text shaping and
+raster rendering remain the responsibility of the application using the font.
 
 ```php
 use Alto\Font\Font;
 
-$font = Font::fromFile(__DIR__.'/fonts/Inter-Regular.woff2');
-
-$family = $font->metadata()->family;
-$advanceWidth = $font->metrics('A')->advanceWidth;
+$font = Font::fromFile(__DIR__.'/fonts/Inter-Regular.ttf');
+echo null === $font->glyphIdForCodepoint(0x41) ? 'A is missing' : 'A is available';
 ```
 
-## Introduction
+A font containing the capital letter A prints `A is available`.
 
-- [Installation](installation.md): install the package and check its runtime requirements.
-- [Getting started](getting-started.md): load a font and inspect one glyph.
+## Documentation
 
-## Fonts
+- [Installation](installation.md): install the package and verify Composer autoloading.
+- [Getting started](getting-started.md): load a font and check its character coverage.
+- [Fonts](fonts.md): understand files, faces, families, characters, and glyphs.
+- [Inspect](inspect.md): read files, metadata, glyphs, and variable-font data.
+- [Convert](convert.md): write TTF, WOFF, and WOFF2 output.
+- [Subset](subset.md): keep selected characters and control the resulting font.
+- [Formats](formats.md): check supported containers, outlines, and runtime requirements.
 
-- [Font basics](fonts.md): distinguish families, faces, files, containers, outlines, characters, and glyphs.
-- [Formats](formats.md): understand containers, outlines, collections, and runtime requirements.
-- [Font files](font-files.md): load a known file or find a matching font.
-- [Discovery](discovery.md): find the best matching font in directories or the operating system.
-- [Font data](font-data.md): choose the API that answers a structure or content question.
-- [Metadata](metadata.md): inspect names, descriptors, dimensions, and licensing fields.
-- [Glyphs](glyphs.md): resolve characters to glyphs and read metrics and outlines.
-- [Variations](variations.md): inspect axes and select a variable-font view.
+## Boundaries
 
-## Conversion
-
-- [Convert fonts](conversion.md): choose an output container and understand what conversion changes.
-- [Writers](conversion/writers.md): write standalone SFNT, WOFF, and WOFF2 files.
-
-## Compression
-
-- [Compress fonts](compression.md): understand SFNT, WOFF, and WOFF2 compression behavior.
-- [WOFF2](compression/woff2.md): choose a Brotli adapter and compression profile.
-
-## Subsetting
-
-- [Create subset](subsetting.md): keep the characters needed by an application.
-- [Unicode sets](subsetting/unicode-sets.md): select text, codepoints, ranges, and CSS unicode ranges.
-- [Policies](subsetting/policies.md): control glyph IDs, hinting, layout, and variable data.
-
-ALTO Font reports and transforms font data. Text layout, fallback,
-bidirectional text, shaping, and rendering belong to higher-level packages.
+ALTO Font supports TrueType outlines in the containers listed under
+[Formats](formats.md). It does not support CFF or CFF2 outlines, shape text,
+rasterize glyphs, or export a selected variable-font instance as a fixed font.
+Check the font's license before distributing converted or subsetted files.

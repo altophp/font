@@ -5,12 +5,20 @@ font-specific and must not be reused with another font.
 
 ## Resolve a character
 
+Place a font at `fonts/Inter-Regular.ttf` and run this script beside `vendor`.
+The remaining examples continue with the same `$font`:
+
 ```php
+<?php
+
+require __DIR__.'/vendor/autoload.php';
+
+use Alto\Font\Font;
+
+$font = Font::fromFile(__DIR__.'/fonts/Inter-Regular.ttf');
 $glyphId = $font->glyphIdForCodepoint(0x00E9); // é
 
-if (null === $glyphId) {
-    // This font has no glyph for the character.
-}
+echo null === $glyphId ? "é is missing\n" : "é is available\n";
 ```
 
 `glyphIdForCodepoint()` returns `null` when the font's character map has no
@@ -22,9 +30,9 @@ clear failure if it is absent:
 ```php
 $metrics = $font->metrics('A');
 
-echo $metrics->glyphId->value;
-echo $metrics->advanceWidth;
-echo $metrics->leftSideBearing;
+printf("Glyph: %d\n", $metrics->glyphId->value);
+printf("Advance: %d\n", $metrics->advanceWidth);
+printf("Side bearing: %d\n", $metrics->leftSideBearing);
 ```
 
 Passing invalid UTF-8, an empty string, or more than one Unicode code point
@@ -35,13 +43,17 @@ expected.
 ## Read metrics by identifier
 
 ```php
-use Alto\Font\Glyph\GlyphId;
-
-$glyphId = new GlyphId(42);
+$glyphId = $metrics->glyphId;
 $metrics = $font->glyphMetrics($glyphId);
 ```
 
 The advance width and side bearing use the font's design units, not pixels.
+
+![Inter A annotated with its baseline, glyph origin, next origin, 1413-unit advance and 52-unit left side bearing.](../assets/figures/glyph-metrics.svg)
+
+In this Inter fixture, `A` advances by 1,413 units and has a 52-unit left side
+bearing. Advance width is the distance to the next origin before shaping;
+it is not the width of the visible ink. The measurements use the bundled Inter fixture.
 
 ## Read an outline
 
@@ -62,6 +74,15 @@ foreach ($outline->contours as $contour) {
 `M`, `L`, `Q`, and `Z` represent move, line, quadratic curve, and close-path
 commands. ALTO Font exposes this neutral geometry without serializing it to
 SVG, a bitmap, or another drawing format.
+
+![Inter o with contour endpoints and quadratic control points, plus a magnified real quadratic segment.](../assets/figures/glyph-contours.svg)
+
+Filled points are contour endpoints; hollow points are quadratic controls.
+The enlarged segment is taken directly from `glyphOutline()`. A control point
+need not lie on the curve. ALTO's commands include implied endpoints, so these
+markers are not an inventory of the original stored font points.
+
+`glyphOutline()` returns geometry rather than an SVG file.
 
 ## Transform geometry
 

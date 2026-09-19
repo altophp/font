@@ -1,4 +1,4 @@
-# Understand fonts
+# Font concepts
 
 A font family groups related designs such as Inter. A face is one selectable
 member of that family, such as Inter Bold Italic. A file stores one face or a
@@ -25,8 +25,8 @@ identifier is not a Unicode codepoint.
 ## Follow the data
 
 1. Read [Formats](formats.md) to confirm that the container and outline are supported.
-2. Use [Font files](font-files.md) to load a known path or discover a matching file.
-3. Use [Font data](font-data.md) to inspect the selected face.
+2. Use [Font files](inspect/font-files.md) to load a known path or discover a matching file.
+3. Use [Font data](inspect.md) to inspect the selected face.
 
-After loading and inspecting a face, continue with [Conversion](conversion.md),
-[Compression](compression.md), or [Subsetting](subsetting.md).
+After loading and inspecting a face, continue with [Conversion](convert.md),
+[Compression](convert/compression.md), or [Subsetting](subset.md).

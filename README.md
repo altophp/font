@@ -1,7 +1,7 @@
 # ALTO Font
 
-Load font files, inspect their data, convert formats, compress webfont output,
-and create Unicode subsets from PHP.
+Inspect, convert, and subset font files from PHP. Read a font's family and
+style, find a matching face, or keep only the characters your application uses.
 
 &nbsp; ![PHP Version](https://img.shields.io/badge/PHP-8.4%2B-00B7FF?logoColor=00B7FF&labelColor=050608)
 &nbsp; ![CI](https://img.shields.io/github/actions/workflow/status/altophp/font/CI.yml?branch=main&label=Tests&labelColor=050608&color=00B7FF)
@@ -9,216 +9,101 @@ and create Unicode subsets from PHP.
 &nbsp; ![License](https://img.shields.io/github/license/altophp/font?label=License&labelColor=050608&color=00B7FF)
 &nbsp; [![GitHub Sponsors](https://img.shields.io/github/sponsors/smnandre?logo=githubsponsors&logoColor=00B7FF&label=%20Sponsor&labelColor=050608&color=00B7FF)](https://github.com/sponsors/smnandre)
 
-ALTO Font loads individual font files and discovers matching files in local or
-system directories. It exposes names, licensing metadata, face dimensions,
-character maps, glyph metrics, outlines, and variable-font axes. It also
-converts supported faces between containers, compresses webfont output, and
-creates conservative Unicode subsets. It does not shape text, apply kerning,
-or render glyphs.
-
-```php
-use Alto\Font\Font;
-
-$font = Font::fromFile(__DIR__.'/fonts/Inter.ttf');
-
-echo $font->metadata()->family;
-echo $font->face()->unitsPerEm;
-echo $font->metrics('A')->advanceWidth;
-```
-
-Unsupported containers and font features fail with typed exceptions instead
-of returning partial data.
-
 ## Installation
 
-Install ALTO Font with Composer:
-
-```bash
+```sh
 composer require alto/font
 ```
 
-ALTO Font requires PHP 8.4 or later with Iconv and Zlib. WOFF2 additionally
-requires the Brotli PHP extension or the `brotli` executable. Writing WOFF2
-uses an explicit compressor adapter.
+Requires PHP 8.4+, Iconv, and Zlib. Reading WOFF2 also needs the Brotli PHP
+extension or executable; [writing WOFF2](docs/convert/woff2.md) requires an
+explicit compressor. TTF and WOFF examples need no Brotli dependency.
 
-## Quick Start
+## Read a font
 
-Load a font and inspect its face, descriptor, and one glyph:
+Save this as `inspect.php`, place your font at `fonts/Inter-Regular.ttf`,
+and run `php inspect.php`:
 
 ```php
+<?php
+
+require __DIR__.'/vendor/autoload.php';
+
 use Alto\Font\Font;
 
 $font = Font::fromFile(__DIR__.'/fonts/Inter-Regular.ttf');
-$descriptor = $font->descriptor();
 
-printf(
-    "%s %s, %d units per em\n",
-    $descriptor->family,
-    $descriptor->subfamily,
-    $font->face()->unitsPerEm,
-);
-
-$metrics = $font->metrics('A');
-$outline = $font->glyphOutline($metrics->glyphId);
+printf("%s %s\n", $font->metadata()->family, $font->metadata()->subfamily);
 ```
 
-Metrics and outlines use the font's design units. Read
-[Getting started](docs/getting-started.md) for scaling and outline inspection.
+For Inter Regular, this prints `Inter Regular`. See
+[Getting started](docs/getting-started.md) to check which characters it contains.
 
-## Fonts
+## Create a smaller font for your text
 
-A family groups related faces. A face is one selectable design stored in a
-standalone file or collection. The file container and the glyph outline
-technology are separate concerns.
-
-Read [Font basics](docs/fonts.md) for the vocabulary used by the package.
-
-### Formats
-
-| Format | Reading | Conversion and subsetting |
-| --- | --- | --- |
-| TrueType and OpenType with `glyf` outlines | Supported | Supported |
-| WOFF 1 | Supported | Supported |
-| WOFF2 | Supported, including transformed `glyf`, `loca`, and `hmtx` | Supported with an injected Brotli compressor |
-| TTC and OTC collections | Supported with `faceIndex` | Selected faces can be extracted |
-| Variable `glyf` fonts | Supported through `fvar`, `avar`, `gvar`, and `HVAR` | Axes can be preserved; compact subsets remap supported HVAR and VVAR metrics |
-| CFF/CFF2 outlines, WOFF2 collections, and color glyphs | Not supported | Not supported |
-
-Read [Font formats](docs/formats.md) for requirements, boundaries, and failure
-types.
-
-### Font files
-
-Load a known font path with `Font::fromFile()`, or use `FontFinder` to select a
-matching file by family, weight, style, and stretch.
-
-Find the closest face for a family, weight, style, and stretch query:
+Create an `output` directory first. Run this as a separate script beside your
+`vendor` directory. The destination must not already exist.
 
 ```php
-use Alto\Font\FontFinder;
-use Alto\Font\FontQuery;
+<?php
 
-$finder = FontFinder::fromDirectories(__DIR__.'/fonts');
-$font = $finder->get(FontQuery::family('Inter')->weight(700)->italic());
-```
+require __DIR__.'/vendor/autoload.php';
 
-ALTO Font can search application directories, system fonts, or a custom
-locator. Start with [Font files](docs/font-files.md), then read
-[Font discovery](docs/discovery.md) for matching and absence policies.
-
-### Font data
-
-`FontFace` exposes structural metrics and table tags. `FontDescriptor` provides
-names and CSS-like matching values, while `FontMetadata` includes optional
-manufacturer, designer, vendor URL, and licensing fields.
-
-Character lookup returns a font-specific glyph identifier. From it, retrieve
-metrics or neutral contour geometry made of move, line, quadratic-curve, and
-close commands.
-
-Start with [Font data](docs/font-data.md), then continue with
-[Font metadata](docs/metadata.md) or [Glyphs](docs/glyphs.md).
-
-### Variable fonts
-
-Inspect axes and select immutable coordinates:
-
-```php
-$boldCondensed = $font->withVariations([
-    'wght' => 700,
-    'wdth' => 85,
-]);
-```
-
-Selected coordinates affect supported glyph metrics and outlines. Read
-[Variable fonts](docs/variations.md) for axes, named instances, clamping, and
-observable results.
-
-## Convert Fonts
-
-Write a complete face or subset as standalone SFNT, WOFF, or WOFF2:
-
-```php
-use Alto\Font\Writer\WoffWriter;
-
-new WoffWriter()->write(
-    $font,
-    __DIR__.'/fonts/inter.woff',
-);
-```
-
-Writers create new destinations and refuse to replace existing files. Read
-[Convert fonts](docs/conversion.md) before choosing a writer and output format.
-
-## Compress Fonts
-
-WOFF applies Zlib automatically when it reduces a table. WOFF2 output requires
-an explicit Brotli adapter:
-
-```php
-use Alto\Font\Compression\BrotliExtensionCompressor;
-use Alto\Font\Writer\Woff2Writer;
-
-new Woff2Writer(new BrotliExtensionCompressor())->write(
-    $font,
-    __DIR__.'/fonts/inter.woff2',
-);
-```
-
-Read [Compress fonts](docs/compression.md) for the overall model, then
-[WOFF2 compression](docs/compression/woff2.md) for adapters and profiles.
-
-## Subset Fonts
-
-Create an immutable subset with conservative defaults:
-
-```php
+use Alto\Font\Font;
 use Alto\Font\Subset\SubsetOptions;
 use Alto\Font\Subset\UnicodeSet;
+use Alto\Font\Writer\WoffWriter;
 
-$subset = $font->subset(new SubsetOptions(
+$font = Font::fromFile(__DIR__.'/fonts/Inter-Regular.ttf');
+$result = $font->subset(new SubsetOptions(
     UnicodeSet::fromText('ALTO Font 0123456789'),
 ));
 
-echo $subset->retainedGlyphCount;
+$destination = __DIR__.'/output/inter-subset.woff';
+new WoffWriter()->write($result->font, $destination);
+
+printf("Saved inter-subset.woff (%d bytes)\n", filesize($destination));
 ```
 
-Read [Create a subset](docs/subsetting.md) before enabling compact glyph IDs,
-hint removal, or layout removal.
+This creates a WOFF file containing the requested characters available in the
+source, plus required glyph dependencies. The original file is unchanged.
+Use the full text your application needs: later text may contain characters
+excluded from this subset. Read [Create a subset](docs/subset.md) for
+missing-character checks, output sizes, and options.
 
-The [complete guide](docs/index.md) links every topic.
+![Source and subset character grids for Inter, with WOFF sizes measured in the same format.](docs/assets/figures/subset-before-after.svg)
 
-## Contributing
+The illustrated subset uses the text above and default options. The exact size
+depends on the source font and the selected characters.
 
-Contributions of all kinds are welcome. Visit the
-[project on GitHub](https://github.com/altophp/font) to
-[report a bug](https://github.com/altophp/font/issues/new),
-[suggest a feature](https://github.com/altophp/font/issues/new), or
-[open a pull request](https://github.com/altophp/font/pulls).
+## Choose a task
 
-Before submitting code, run:
+| I want to... | Guide |
+| --- | --- |
+| Understand files, faces, characters, and glyphs | [Font concepts](docs/fonts.md) |
+| Read a font's family, style, or license fields | [Read metadata](docs/inspect/metadata.md) |
+| Check whether a font contains my characters | [Getting started](docs/getting-started.md) |
+| Inspect files, metadata, glyphs, and variations | [Inspect fonts](docs/inspect.md) |
+| Convert a font to TTF, WOFF, or WOFF2 | [Convert a font](docs/convert.md) |
+| Reduce a font to the text I use | [Create a subset](docs/subset.md) |
+| Find a font by family, weight, and style | [Find a font](docs/inspect/discovery.md) |
+| Inspect variable-font axes and glyph measurements | [Variable fonts](docs/inspect/variations.md) |
+| Check supported containers and outline formats | [Font formats](docs/formats.md) |
 
-```bash
-# Runs PHP CS Fixer, PHPStan, and PHPUnit
-composer qa
-```
+The [documentation index](docs/index.md) lists every main guide.
 
-Changes to public behavior should include tests and documentation.
+## Supported fonts
 
-For changes to font output or subsetting, also run the independent
-[sanitizer and shaping checks](tests/Validation/README.md) with
-`composer validate-opentype`.
+ALTO Font supports TrueType outlines in TTF/OpenType, WOFF, and WOFF2 files,
+and individual faces from TTC/OTC collections. CFF/CFF2 outlines, color glyphs,
+and WOFF2 collections are unsupported. See [Formats](docs/formats.md) for
+operation-specific limits.
 
-## Support
-
-ALTO Font is open source. You can support its continued development through
-[GitHub Sponsors](https://github.com/sponsors/smnandre).
-
-Sharing this package with others or
-[starring it on GitHub](https://github.com/altophp/font) is also much
-appreciated.
+Variable fonts can retain their axes during conversion and subsetting.
+Exporting a fixed weight from a variable font is not supported.
+ALTO Font reads and transforms font data; text shaping and rendering are
+handled by the application or browser using the output.
 
 ## License
 
-ALTO Font is released by [ALTO PHP](https://altophp.com) under the
-[MIT License](LICENSE).
+Released by [ALTO PHP](https://altophp.com) under the [MIT License](LICENSE).

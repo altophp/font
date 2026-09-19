@@ -1,57 +1,77 @@
 # Getting started
 
-Load a font once, then use the returned `Font` object for metadata and glyph
-queries.
+Read a font's family and style, then check whether it contains the characters
+in your text. This gives you a first check before using that font in an
+application or preparing a subset.
+
+Install the package as described in [Installation](installation.md). Put a
+TrueType font at `fonts/Inter-Regular.ttf` beside your `vendor` directory, or
+change the path below to your own font.
+
+Save this as `inspect.php` and run `php inspect.php`:
 
 ```php
+<?php
+
+require __DIR__.'/vendor/autoload.php';
+
 use Alto\Font\Font;
 
 $font = Font::fromFile(__DIR__.'/fonts/Inter-Regular.ttf');
-$face = $font->face();
-$descriptor = $font->descriptor();
+$metadata = $font->metadata();
 
-printf(
-    "%s %s, %d units per em\n",
-    $descriptor->family,
-    $descriptor->subfamily,
-    $face->unitsPerEm,
-);
+printf("Family: %s\nStyle: %s\n", $metadata->family, $metadata->subfamily);
 ```
 
-## Inspect a character
+For Inter Regular, the output is:
 
-`metrics()` is the shortest route when you have exactly one character:
-
-```php
-$metrics = $font->metrics('A');
-
-echo $metrics->advanceWidth;
-echo $metrics->leftSideBearing;
+```text
+Family: Inter
+Style: Regular
 ```
 
-Metrics use the font's design units. Divide by `unitsPerEm` and multiply by
-your target font size when converting them to another coordinate system.
+The values come from your font; ALTO Font does not download Inter for you.
+Loading a font leaves the original file unchanged.
 
-To inspect the outline, resolve the Unicode code point first:
+![Inter Regular specimen, 518 glyphs and 2048 units per em; A is available and U+65E5 is missing from this sample.](assets/figures/font-specimen.svg)
+
+This is the bundled Inter Latin sample. Your file may contain a different
+character set or glyph count. The illustration uses the bundled Inter Latin sample.
+
+## Check whether the font contains your text
+
+Add this to the same script:
 
 ```php
-$glyphId = $font->glyphIdForCodepoint(ord('A'));
+use Alto\Font\Subset\UnicodeSet;
 
-if (null === $glyphId) {
-    throw new RuntimeException('The font does not contain A.');
-}
-
-$outline = $font->glyphOutline($glyphId);
-
-foreach ($outline->contours as $contour) {
-    foreach ($contour->commands as $command) {
-        printf("%s %s\n", $command->type, implode(' ', $command->coordinates));
-    }
+foreach (UnicodeSet::fromText('Café') as $codepoint) {
+    printf(
+        "U+%04X: %s\n",
+        $codepoint,
+        null === $font->glyphIdForCodepoint($codepoint) ? 'missing' : 'available',
+    );
 }
 ```
 
-The outline contains generic move, line, quadratic-curve, and close commands.
-It is geometry, not an SVG or another rendered format.
+With the Inter Latin sample, the added block prints each distinct codepoint
+in ascending order:
 
-Continue with [Font basics](fonts.md), [Font files](font-files.md), or
-[Font data](font-data.md), depending on the job your application performs.
+```text
+U+0043: available
+U+0061: available
+U+0066: available
+U+00E9: available
+```
+
+`missing` means the font has no character mapping for it. ALTO Font does not
+select a replacement font. This checks character availability, not whether a
+whole phrase will shape or render correctly.
+
+## Continue with your font
+
+Continue with [Read metadata](inspect/metadata.md) to inspect version, style, and
+license fields. If file, face, or glyph terminology is unfamiliar, read
+[Font concepts](fonts.md).
+
+If loading fails, see [loading failures](inspect/font-files.md#when-a-font-will-not-load).

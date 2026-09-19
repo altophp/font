@@ -1,34 +1,10 @@
-# Choose subset policies
+# OpenType subsetting support
 
-`SubsetOptions` controls three independent decisions. The defaults preserve
-the source font's structure and are recommended for the first result.
-
-| Decision | Default | Advanced choices | Main trade-off |
-| --- | --- | --- | --- |
-| Glyph IDs | `GlyphIdPolicy::Preserve` | `Compact` | Smaller glyph space, but more tables must be rewritten |
-| Hinting | `HintingPolicy::Keep` | `Drop` | Smaller output, but low-resolution rendering may change |
-| Layout | `LayoutPolicy::Preserve` | `SubstitutionsOnly`, `Drop` | Smaller output, but positioning, ligatures, or shaping may change |
-
-## Preserve the source behavior
-
-```php
-$result = $font->subset(new SubsetOptions($characters));
-```
-
-Preserve mode keeps original glyph IDs and leaves unused slots empty. Compound
-components and GSUB dependencies are retained. GPOS and GDEF remain valid
-because glyph IDs do not change.
+This reference describes the table-level limits of subsetting. Start with
+[Create a subset](../subset.md) for a working example, or
+[Choose subset options](options.md) for application decisions.
 
 ## Compact glyph IDs
-
-```php
-use Alto\Font\Subset\GlyphIdPolicy;
-
-$result = $font->subset(new SubsetOptions(
-    $characters,
-    glyphIds: GlyphIdPolicy::Compact,
-));
-```
 
 Compact mode renumbers retained glyphs and removes PostScript glyph names by
 writing `post` format 3 when required. It rewrites supported `cmap`, horizontal
@@ -60,21 +36,12 @@ or VariationIndex adjustments while relocating their offsets. The shared
 variation store is rebuilt from its referenced structures, so it need not be
 the final top-level subtable in the source GDEF table.
 
-## Remove hinting
+## Hinting tables
 
-```php
-use Alto\Font\Subset\HintingPolicy;
+Dropping hinting removes glyph instructions and the related `cvar`, `cvt `, `fpgm`,
+`prep`, `hdmx`, `LTSH`, and `VDMX` tables when `HintingPolicy::Drop` is selected.
 
-$result = $font->subset(new SubsetOptions(
-    $characters,
-    hinting: HintingPolicy::Drop,
-));
-```
-
-This removes glyph instructions and the related `cvar`, `cvt `, `fpgm`,
-`prep`, `hdmx`, `LTSH`, and `VDMX` tables.
-
-## Reduce layout data
+## Layout tables
 
 `LayoutPolicy::SubstitutionsOnly` keeps supported GSUB substitutions and their
 required GDEF data while removing GPOS positioning. `LayoutPolicy::Drop`
@@ -83,11 +50,7 @@ removes GSUB, GPOS, and GDEF entirely.
 This policy controls OpenType Layout tables. A legacy `kern` table is preserved
 and remapped independently when its subtables use supported format 0.
 
-Dropping layout is appropriate only for controlled content such as digits,
-icons, or isolated symbols. It is unsafe for general prose or scripts that
-depend on shaping and mark positioning.
-
-## Variable fonts
+## Variable fonts and unsupported structures
 
 Supported variable TrueType subsets preserve all axes. Compact mode remaps
 per-glyph `gvar` blocks and HVAR mappings while preserving supported axis data.
@@ -119,3 +82,6 @@ Preserving outlines and positioning does not guarantee identical rasterized
 pixels. In the Recursive/CoreText validation sample, removing `post` glyph
 names changes small-size rendering even when all other font data is retained.
 Removing glyphs used by that renderer can also affect retained glyphs.
+
+The [Recursive rendering diagnosis](https://github.com/altophp/font/blob/main/tests/Validation/RECURSIVE_RENDERING.md)
+contains the reproducible CoreText evidence and the limits of its workaround.

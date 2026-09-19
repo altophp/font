@@ -16,7 +16,7 @@ extension.
 | Color glyphs | Not supported | COLR, CPAL, SVG, sbix, CBDT, and CBLC are not rendered |
 
 Container and outline support does not guarantee that every table can be
-rewritten for compact subsetting. See [subset policies](subsetting/policies.md)
+rewritten for compact subsetting. See [OpenType subsetting support](subset/opentype.md)
 for layout offset limits and the boundaries of variable-font compaction.
 Static variable-font export and axis-range reduction are not supported.
 

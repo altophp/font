@@ -1,7 +1,7 @@
 # Compress fonts
 
 Compression reduces the container representation of a font. It does not remove
-characters, glyphs, hinting, or layout data. Use [subsetting](subsetting.md)
+characters, glyphs, hinting, or layout data. Use [subsetting](../subset.md)
 when the font itself should contain less data.
 
 Compression happens while converting a face to a webfont container:
@@ -25,6 +25,6 @@ WOFF compression is automatic and uses the required Zlib extension. WOFF2
 writing instead requires an explicit Brotli adapter so the application chooses
 between the PHP extension, a process, or its own implementation.
 
-Read [WOFF2](compression/woff2.md) for adapters, profiles, temporary resources,
-and memory behavior. Read [Conversion](conversion.md) for writer and container
+Read [WOFF2](woff2.md) for adapters, profiles, temporary resources,
+and memory behavior. Read [Conversion](../convert.md) for writer and container
 selection.
