@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="590" viewBox="0 0 900 590" role="img" aria-labelledby="title description">
+<title id="title">Glyph width and advance are different</title>
+<desc id="description">Inter Regular A. The baseline is y=0; advance width is the origin-to-next-origin distance. The left side bearing separates the origin from the left edge of this glyph.</desc>
+<rect width="900" height="590" fill="#fafbfe"/>
+<g font-family="Arial, Helvetica, sans-serif">
+<text x="32" y="45" font-size="28" fill="#243047">Glyph width and advance are different</text>
+<text x="32" y="85" font-size="20" fill="#5d6878">Inter Regular / A / values in font design units</text>
+<path d="M 80 410 L 820 410" fill="none" stroke="#2254d7" stroke-width="1.5"/>
+<path d="M 220 115 L 220 490" fill="none" stroke="#2254d7" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 474.34 115 L 474.34 490" fill="none" stroke="#2254d7" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 229.36 130 L 229.36 425" fill="none" stroke="#bc4d16" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M229.360 410.000 L326.740 141.800 L366.340 141.800 L464.980 410.000 L428.980 410.000 L372.100 250.880 Q366.880 236.120 359.950 214.070 Q353.020 192.020 343.120 157.820 L349.600 157.820 Q339.880 192.380 332.770 214.790 Q325.660 237.200 320.980 250.880 L265.720 410.000 L229.360 410.000 Z M278.320 335.120 L278.320 305.240 L416.020 305.240 L416.020 335.120 L278.320 335.120 Z" fill="#243047"/>
+<text x="590" y="174" font-size="20" fill="#2254d7">Advance width</text>
+<text x="590" y="210" font-size="30" fill="#243047">1413 units</text>
+<text x="590" y="270" font-size="20" fill="#bc4d16">Left side bearing</text>
+<text x="590" y="306" font-size="30" fill="#243047">52 units</text>
+<text x="630" y="395" font-size="19" fill="#2254d7">Baseline / y = 0</text>
+<path d="M 220 465 L 474.34 465" fill="none" stroke="#2254d7" stroke-width="1.5"/>
+<path d="M 220 457 L 220 473" fill="none" stroke="#2254d7" stroke-width="1.5"/>
+<path d="M 474.34 457 L 474.34 473" fill="none" stroke="#2254d7" stroke-width="1.5"/>
+<text x="195" y="512" font-size="19" fill="#2254d7">Origin</text>
+<text x="444.34" y="512" font-size="19" fill="#2254d7">Next origin</text>
+<text x="32" y="563" font-size="19" fill="#5d6878">An advance positions the next glyph. It is not a text-shaping or kerning result.</text>
+</g>
+</svg>

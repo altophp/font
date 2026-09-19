@@ -1,8 +1,13 @@
 # Use font writers
 
 Writers keep the selected face and change its output container. They do not
-reduce the character or glyph set. Use [Create a font subset](../subsetting.md)
+reduce the character or glyph set. Use [Create a font subset](../subset.md)
 first when the output should contain fewer glyphs.
+
+The examples assume Composer's autoloader is loaded, a source font exists at
+`fonts/Inter-Regular.ttf`, and `output` exists. Run the first example with the
+PHP Brotli extension installed; it creates three new font files and prints
+nothing. Use [Convert a font](../convert.md) for a complete first script.
 
 ## Write SFNT, WOFF, and WOFF2
 
@@ -58,6 +63,20 @@ new SfntWriter()->write($font, __DIR__.'/output/selected-face.ttf');
 
 A selected TTC or OTC face is always written as a standalone font.
 
+## Writer contracts
+
+`SfntWriter`, `WoffWriter`, and `Woff2Writer` belong to `Alto\Font\Writer`.
+They expose the same two methods:
+
+| Signature | Result and side effects |
+| --- | --- |
+| `dump(Font $font): string` | Return all output bytes in memory. No output file is created. Compression adapters may use temporary resources. |
+| `write(Font $font, string\|Stringable $file): void` | Write a new local file. Its parent directory must exist; an existing destination is never replaced. |
+
+`SfntWriter` and `WoffWriter` need no constructor arguments.
+`Woff2Writer` requires a `BrotliCompressorInterface`; see
+[WOFF2 compression](woff2.md) for the available adapters.
+
 ## Understand reconstruction
 
 | Source and target | Result |
@@ -86,5 +105,13 @@ equivalent, not necessarily byte-for-byte identical.
 These exceptions implement `FontExceptionInterface`. A selected variable view
 created with `withVariations()` cannot be written as a static font.
 
-See [WOFF2 compression](../compression/woff2.md) for Brotli configuration and
+See [WOFF2 compression](woff2.md) for Brotli configuration and
 memory behavior.
+
+Create the destination directory before writing and choose a new filename for
+a rerun: writers do not create directories or overwrite files. For compression
+or temporary-storage failures, check the [WOFF2 runtime](woff2.md#check-the-runtime).
+
+A selected variable view is read-only. Use `withoutVariations()` to write the
+original variable font with all its axes, or supply a static source font when
+you need a fixed-weight file. See [Variable fonts](../inspect/variations.md).

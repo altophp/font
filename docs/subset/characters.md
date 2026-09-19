@@ -1,4 +1,4 @@
-# Build Unicode sets
+# Select characters
 
 `UnicodeSet` represents normalized Unicode ranges. It can be created from text,
 codepoints, ranges, or CSS unicode-range syntax.
@@ -66,4 +66,25 @@ whether the set contains none. Iterating over a `UnicodeSet` yields individual
 codepoints and therefore expands the selected ranges during iteration.
 
 Pass the finished set to `SubsetOptions` as shown in
-[Create a font subset](../subsetting.md).
+[Create a font subset](../subset.md).
+
+## Unicode set contract
+
+`UnicodeSet` is immutable, countable, and iterable. Its factories normalize
+repeated or overlapping codepoints into ordered ranges.
+
+| Method | Result |
+| --- | --- |
+| `fromText(string $text)` | Select codepoints from valid UTF-8 text without adding normalization equivalents. |
+| `fromCodepoints(iterable $codepoints)` | Select integer values from U+0000 through U+10FFFF. |
+| `fromRanges(iterable $ranges)` | Merge overlapping or adjacent `UnicodeRange` values. |
+| `fromCss(string $unicodeRange)` | Parse a non-empty CSS unicode-range list, including supported wildcard notation. |
+| `union(UnicodeSet $other)` | Include values in either set. |
+| `intersect(UnicodeSet $other)` | Include values present in both sets. |
+| `without(UnicodeSet $other)` | Remove values present in the other set. |
+| `contains(int $codepoint)` | Test whether one valid codepoint belongs to the set. |
+| `toCss()` | Serialize normalized ranges as CSS unicode-range text. |
+
+`UnicodeRange::single()` selects one codepoint. `UnicodeRange::between()` uses
+inclusive bounds. Invalid bounds, codepoints, or CSS syntax raise
+`InvalidUnicodeRangeException`; invalid UTF-8 raises `InvalidTextException`.

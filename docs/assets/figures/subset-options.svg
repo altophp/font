@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="520" viewBox="0 0 900 520" role="img" aria-labelledby="title description">
+<title id="title">Compare subset options on the same font</title>
+<desc id="description">All rows select ALTO Font 0123456789 from Inter and preserve layout. WOFF sizes, retained glyph counts and glyph slots are measured, not estimates.</desc>
+<rect width="900" height="520" fill="#fafbfe"/>
+<g font-family="Arial, Helvetica, sans-serif">
+<text x="32" y="45" font-size="28" fill="#243047">Compare subset options on the same font</text>
+<text x="32" y="85" font-size="20" fill="#5d6878">Same text, same WOFF writer, layout preserved in every row</text>
+<text x="32" y="145" font-size="22" fill="#243047">Defaults</text>
+<text x="440" y="145" font-size="19" fill="#5d6878">104 retained / 518 slots</text>
+<text x="705" y="145" font-size="21" fill="#2254d7">19,784 bytes</text>
+<rect x="32" y="165" width="800" height="17" rx="4" fill="#2254d7"/>
+<text x="32" y="250" font-size="22" fill="#243047">Compact glyph IDs</text>
+<text x="440" y="250" font-size="19" fill="#5d6878">104 retained / 104 slots</text>
+<text x="705" y="250" font-size="21" fill="#2254d7">8,308 bytes</text>
+<rect x="32" y="270" width="335.948" height="17" rx="4" fill="#2254d7"/>
+<text x="32" y="355" font-size="22" fill="#243047">Compact + drop hinting</text>
+<text x="440" y="355" font-size="19" fill="#5d6878">104 retained / 104 slots</text>
+<text x="705" y="355" font-size="21" fill="#2254d7">8,280 bytes</text>
+<rect x="32" y="375" width="334.816" height="17" rx="4" fill="#2254d7"/>
+<text x="32" y="453" font-size="19" fill="#5d6878">Preserve mode leaves empty glyph slots. Compact mode renumbers glyphs.</text>
+<text x="32" y="486" font-size="18" fill="#5d6878">Smaller is not always preferable: compare actual rendering before dropping hinting.</text>
+</g>
+</svg>

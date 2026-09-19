@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="610" viewBox="0 0 900 610" role="img" aria-labelledby="title description">
+<title id="title">A contour is made of drawing commands</title>
+<desc id="description">Inter Regular o with endpoints and quadratic control points. A magnified first quadratic segment shows the start, control point, and endpoint in font units.</desc>
+<rect width="900" height="610" fill="#fafbfe"/>
+<g font-family="Arial, Helvetica, sans-serif">
+<text x="32" y="45" font-size="28" fill="#243047">A contour is made of drawing commands</text>
+<text x="32" y="85" font-size="20" fill="#5d6878">Inter Regular / o</text>
+<path d="M203.640 456.720 Q161.080 456.720 129.020 436.560 Q96.960 416.400 79.040 380.000 Q61.120 343.600 61.120 295.440 Q61.120 246.440 79.040 209.900 Q96.960 173.360 129.020 153.200 Q161.080 133.040 203.640 133.040 Q246.480 133.040 278.680 153.200 Q310.880 173.360 328.800 209.900 Q346.720 246.440 346.720 295.440 Q346.720 343.600 328.800 380.000 Q310.880 416.400 278.680 436.560 Q246.480 456.720 203.640 456.720 Z M203.640 411.640 Q235.280 411.640 255.720 395.400 Q276.160 379.160 285.960 352.700 Q295.760 326.240 295.760 295.440 Q295.760 264.360 285.960 237.620 Q276.160 210.880 255.720 194.500 Q235.280 178.120 203.640 178.120 Q172.280 178.120 152.120 194.500 Q131.960 210.880 122.160 237.480 Q112.360 264.080 112.360 295.440 Q112.360 326.240 122.160 352.700 Q131.960 379.160 152.120 395.400 Q172.280 411.640 203.640 411.640 Z" fill="#e4eafa" stroke="#2254d7" stroke-width="1.5"/>
+<circle cx="203.64" cy="456.72" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<path d="M 203.64 456.72 L 161.08 456.72" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 161.08 456.72 L 129.02 436.56" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="161.08" cy="456.72" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="129.02" cy="436.56" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<path d="M 129.02 436.56 L 96.96 416.4" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 96.96 416.4 L 79.04 380" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="96.96" cy="416.4" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="79.04" cy="380" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<path d="M 79.04 380 L 61.12 343.6" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 61.12 343.6 L 61.12 295.44" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="61.12" cy="343.6" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="61.12" cy="295.44" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<path d="M 61.12 295.44 L 61.12 246.44" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 61.12 246.44 L 79.04 209.9" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="61.12" cy="246.44" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="79.04" cy="209.9" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<path d="M 79.04 209.9 L 96.96 173.36" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 96.96 173.36 L 129.02 153.2" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="96.96" cy="173.36" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="129.02" cy="153.2" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<path d="M 129.02 153.2 L 161.08 133.04" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 161.08 133.04 L 203.64 133.04" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="161.08" cy="133.04" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="203.64" cy="133.04" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<path d="M 203.64 133.04 L 246.48 133.04" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 246.48 133.04 L 278.68 153.2" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="246.48" cy="133.04" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="278.68" cy="153.2" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<path d="M 278.68 153.2 L 310.88 173.36" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 310.88 173.36 L 328.8 209.9" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="310.88" cy="173.36" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="328.8" cy="209.9" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<path d="M 328.8 209.9 L 346.72 246.44" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 346.72 246.44 L 346.72 295.44" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="346.72" cy="246.44" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="346.72" cy="295.44" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<path d="M 346.72 295.44 L 346.72 343.6" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 346.72 343.6 L 328.8 380" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="346.72" cy="343.6" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="328.8" cy="380" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<path d="M 328.8 380 L 310.88 416.4" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 310.88 416.4 L 278.68 436.56" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="310.88" cy="416.4" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="278.68" cy="436.56" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<path d="M 278.68 436.56 L 246.48 456.72" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 246.48 456.72 L 203.64 456.72" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="246.48" cy="456.72" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="203.64" cy="456.72" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<circle cx="203.64" cy="411.64" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<path d="M 203.64 411.64 L 235.28 411.64" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 235.28 411.64 L 255.72 395.4" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="235.28" cy="411.64" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="255.72" cy="395.4" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<path d="M 255.72 395.4 L 276.16 379.16" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 276.16 379.16 L 285.96 352.7" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="276.16" cy="379.16" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="285.96" cy="352.7" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<path d="M 285.96 352.7 L 295.76 326.24" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 295.76 326.24 L 295.76 295.44" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="295.76" cy="326.24" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="295.76" cy="295.44" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<path d="M 295.76 295.44 L 295.76 264.36" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 295.76 264.36 L 285.96 237.62" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="295.76" cy="264.36" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="285.96" cy="237.62" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<path d="M 285.96 237.62 L 276.16 210.88" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 276.16 210.88 L 255.72 194.5" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="276.16" cy="210.88" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="255.72" cy="194.5" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<path d="M 255.72 194.5 L 235.28 178.12" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 235.28 178.12 L 203.64 178.12" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="235.28" cy="178.12" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="203.64" cy="178.12" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<path d="M 203.64 178.12 L 172.28 178.12" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 172.28 178.12 L 152.12 194.5" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="172.28" cy="178.12" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="152.12" cy="194.5" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<path d="M 152.12 194.5 L 131.96 210.88" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 131.96 210.88 L 122.16 237.48" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="131.96" cy="210.88" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="122.16" cy="237.48" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<path d="M 122.16 237.48 L 112.36 264.08" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 112.36 264.08 L 112.36 295.44" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="112.36" cy="264.08" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="112.36" cy="295.44" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<path d="M 112.36 295.44 L 112.36 326.24" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 112.36 326.24 L 122.16 352.7" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="112.36" cy="326.24" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="122.16" cy="352.7" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<path d="M 122.16 352.7 L 131.96 379.16" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 131.96 379.16 L 152.12 395.4" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="131.96" cy="379.16" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="152.12" cy="395.4" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<path d="M 152.12 395.4 L 172.28 411.64" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 172.28 411.64 L 203.64 411.64" fill="none" stroke="#d5b79e" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="172.28" cy="411.64" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="203.64" cy="411.64" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<text x="470" y="140" font-size="22" fill="#243047">One quadratic segment</text>
+<path d="M822.350 307.800 Q677.950 307.800 569.175 239.400" fill="none" stroke="#2254d7" stroke-width="1.5"/>
+<path d="M 822.35 307.8 L 677.95 307.8" fill="none" stroke="#bc4d16" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 677.95 307.8 L 569.175 239.4" fill="none" stroke="#bc4d16" stroke-width="1.5" stroke-dasharray="5 5"/>
+<circle cx="822.35" cy="307.8" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<circle cx="677.95" cy="307.8" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<circle cx="569.175" cy="239.4" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<text x="519.175" y="221.4" font-size="18" fill="#2254d7">End</text>
+<text x="797.35" y="289.8" font-size="18" fill="#2254d7">Start</text>
+<text x="645.95" y="339.8" font-size="18" fill="#bc4d16">Control</text>
+<text x="470" y="397" font-size="21" fill="#243047">M 613 -24</text>
+<text x="470" y="432" font-size="21" fill="#243047">Q 461 -24 346.5 48</text>
+<circle cx="40" cy="519" r="4" fill="#2254d7" stroke="#2254d7" stroke-width="2"/>
+<text x="55" y="526" font-size="19" fill="#243047">Contour endpoint</text>
+<circle cx="470" cy="519" r="4" fill="#ffffff" stroke="#bc4d16" stroke-width="2"/>
+<text x="486" y="526" font-size="19" fill="#243047">Quadratic control point</text>
+<text x="32" y="578" font-size="18" fill="#5d6878">ALTO commands include implied endpoints. Control points need not lie on the curve.</text>
+</g>
+</svg>
