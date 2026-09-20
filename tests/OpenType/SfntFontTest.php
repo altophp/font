@@ -25,6 +25,7 @@ use Alto\Font\Tests\Fixtures\ContourAssertions;
 use Alto\Font\Tests\Fixtures\TinyTrueTypeFont;
 use Alto\Font\Variation\VariationCoordinates;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 #[CoversClass(SfntFont::class)]
@@ -49,6 +50,35 @@ final class SfntFontTest extends TestCase
         self::assertSame(1, $glyphId->value);
         self::assertSame(600, $font->glyphMetrics($glyphId)->advanceWidth);
         self::assertSame('M 100 0 L 300 700 L 500 0 L 100 0 Z', self::describeContour($font->glyphOutline($glyphId)->contours[0]));
+    }
+
+    /**
+     * @param array{bool, bool, bool} $onCurve
+     */
+    #[DataProvider('quadraticContours')]
+    public function testItReconstructsQuadraticContoursAndImplicitPoints(array $onCurve, string $expected): void
+    {
+        $path = sys_get_temp_dir() . '/alto-font-quadratic-contour-' . bin2hex(random_bytes(8)) . '.ttf';
+        TinyTrueTypeFont::writeWithQuadraticPoints($path, $onCurve);
+
+        try {
+            $outline = SfntFont::open($path)->glyphOutline(new GlyphId(1));
+            self::assertCount(1, $outline->contours);
+            self::assertSame($expected, self::describeContour($outline->contours[0]));
+        } finally {
+            unlink($path);
+        }
+    }
+
+    /**
+     * @return iterable<string, array{array{bool, bool, bool}, string}>
+     */
+    public static function quadraticContours(): iterable
+    {
+        yield 'on-curve start' => [[true, false, true], 'M 100 0 Q 300 700 500 0 L 100 0 Z'];
+        yield 'last point supplies start' => [[false, true, true], 'M 500 0 Q 100 0 300 700 L 500 0 Z'];
+        yield 'implicit start and closing midpoint' => [[false, true, false], 'M 300 0 Q 100 0 300 700 Q 500 0 300 0 Z'];
+        yield 'all off-curve points' => [[false, false, false], 'M 300 0 Q 100 0 200 350 Q 300 700 400 350 Q 500 0 300 0 Z'];
     }
 
     public function testItDetectsAnInMemoryTrueTypeContainerInsteadOfUsingItsLabel(): void
@@ -553,6 +583,41 @@ final class SfntFontTest extends TestCase
         self::assertSame(640, $font->glyphMetrics($glyphId, $coordinates)->advanceWidth);
         self::assertSame(610, $font->glyphMetrics(new GlyphId(2), $coordinates)->advanceWidth);
         self::assertSame(500, $font->glyphMetrics(new GlyphId(0), $coordinates)->advanceWidth);
+    }
+
+    /**
+     * @param list<int> $points
+     * @param list<int> $xDeltas
+     * @param list<int> $yDeltas
+     */
+    #[DataProvider('sparseContourVariations')]
+    public function testItInterpolatesSparseContourVariations(array $points, array $xDeltas, array $yDeltas, int $weight, string $expected): void
+    {
+        $path = sys_get_temp_dir() . '/alto-font-sparse-contour-' . bin2hex(random_bytes(8)) . '.ttf';
+        TinyTrueTypeFont::writeVariableWithSparseGvar($path, $points, $xDeltas, $yDeltas);
+
+        try {
+            $font = SfntFont::open($path);
+            $glyphId = new GlyphId(3);
+            $coordinates = new VariationCoordinates(['wght' => $weight]);
+
+            self::assertSame($expected, self::describeContour($font->glyphOutline($glyphId, $coordinates)->contours[0]));
+            self::assertSame('M 80 0 L 80 700 L 420 700 L 420 0 L 80 0 Z', self::describeContour($font->glyphOutline($glyphId)->contours[0]));
+        } finally {
+            unlink($path);
+        }
+    }
+
+    /**
+     * @return iterable<string, array{list<int>, list<int>, list<int>, int, string}>
+     */
+    public static function sparseContourVariations(): iterable
+    {
+        yield 'opposite corners and contour wrap' => [[0, 2], [20, -20], [0, 0], 900, 'M 100 0 L 100 700 L 400 700 L 400 0 L 100 0 Z'];
+        yield 'intermediate coordinate' => [[0, 2], [20, -20], [0, 0], 650, 'M 90 0 L 90 700 L 410 700 L 410 0 L 90 0 Z'];
+        yield 'one touched point translates contour' => [[1], [20], [-30], 900, 'M 100 -30 L 100 670 L 440 670 L 440 -30 L 100 -30 Z'];
+        yield 'equal coordinates with equal deltas' => [[0, 1], [20, 20], [0, 70], 900, 'M 100 0 L 100 770 L 440 770 L 440 0 L 100 0 Z'];
+        yield 'default coordinate leaves outline unchanged' => [[0, 2], [20, -20], [0, 0], 400, 'M 80 0 L 80 700 L 420 700 L 420 0 L 80 0 Z'];
     }
 
     public function testItKeepsStaticMetricsWhenAVariableFontHasNoGvarTable(): void
