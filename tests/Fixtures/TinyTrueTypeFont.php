@@ -52,6 +52,24 @@ final class TinyTrueTypeFont
         )));
     }
 
+    /**
+     * @param array{bool, bool, bool} $onCurve
+     */
+    public static function writeWithQuadraticPoints(string $path, array $onCurve): void
+    {
+        $glyph = self::simpleGlyph([[100, 0], [300, 700], [500, 0]]);
+
+        foreach ($onCurve as $index => $value) {
+            $glyph[14 + $index] = $value ? "\x01" : "\x00";
+        }
+
+        file_put_contents($path, self::sfnt(self::tables(
+            compoundCycle: false,
+            unsupportedCff: false,
+            firstGlyph: $glyph,
+        )));
+    }
+
     public static function writeWithExpandingShortLoca(string $path): void
     {
         file_put_contents($path, self::sfnt(self::tables(
@@ -234,11 +252,16 @@ final class TinyTrueTypeFont
         file_put_contents($path, self::sfnt($tables));
     }
 
-    public static function writeVariableWithSparseGvar(string $path): void
+    /**
+     * @param list<int> $points
+     * @param list<int> $xDeltas
+     * @param list<int> $yDeltas
+     */
+    public static function writeVariableWithSparseGvar(string $path, array $points = [0, 2], array $xDeltas = [20, -20], array $yDeltas = [0, 0]): void
     {
         $tables = self::tables(compoundCycle: false, unsupportedCff: false);
         $tables['fvar'] = self::fvar();
-        $tables['gvar'] = self::sparseGvar();
+        $tables['gvar'] = self::sparseGvar($points, $xDeltas, $yDeltas);
         ksort($tables);
 
         file_put_contents($path, self::sfnt($tables));
@@ -879,11 +902,16 @@ final class TinyTrueTypeFont
             .$glyphData;
     }
 
-    private static function sparseGvar(): string
+    /**
+     * @param list<int> $points
+     * @param list<int> $xDeltas
+     * @param list<int> $yDeltas
+     */
+    private static function sparseGvar(array $points, array $xDeltas, array $yDeltas): string
     {
-        $tupleData = self::pointNumbers([0, 2])
-            .self::deltaBytes([20, -20])
-            .self::zeroDeltas(2);
+        $tupleData = self::pointNumbers($points)
+            .self::deltaBytes($xDeltas)
+            .self::deltaBytes($yDeltas);
         $glyphData = self::u16(1)
             .self::u16(12)
             .self::u16(\strlen($tupleData))
