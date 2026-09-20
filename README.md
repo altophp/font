@@ -104,6 +104,34 @@ Exporting a fixed weight from a variable font is not supported.
 ALTO Font reads and transforms font data; text shaping and rendering are
 handled by the application or browser using the output.
 
+## Contributing
+
+Contributions of all kinds are welcome. Visit the
+[project on GitHub](https://github.com/altophp/font) to
+[report a bug](https://github.com/altophp/font/issues/new),
+[suggest a feature](https://github.com/altophp/font/issues/new), or
+[open a pull request](https://github.com/altophp/font/pulls).
+
+Before submitting code, run:
+
+```bash
+# Runs PHP CS Fixer, PHPStan, and PHPUnit
+composer qa
+```
+
+Changes to public behavior should include tests and documentation.
+
+## Support
+
+ALTO Font is open source and independently maintained by
+[Simon André](https://smnandre.dev). If it is useful to your work, you can
+support its continued development through
+[GitHub Sponsors](https://github.com/sponsors/smnandre).
+
+Sharing the package or
+[starring it on GitHub](https://github.com/altophp/font) also helps.
+
 ## License
 
-Released by [ALTO PHP](https://altophp.com) under the [MIT License](LICENSE).
+ALTO Font is released by [ALTO PHP](https://altophp.com) under the
+[MIT License](LICENSE).
