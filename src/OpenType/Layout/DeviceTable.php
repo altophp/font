@@ -20,6 +20,8 @@ use Alto\Font\Exception\UnsupportedFontException;
 /**
  * Copies and relocates Device and VariationIndex tables used by layout values.
  *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @internal
  */
 final readonly class DeviceTable
