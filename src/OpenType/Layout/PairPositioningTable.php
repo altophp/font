@@ -18,6 +18,8 @@ use Alto\Font\Exception\UnsupportedFontException;
 /**
  * Serializes explicit glyph pairs, including class-pair fallback records.
  *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @internal
  */
 final readonly class PairPositioningTable

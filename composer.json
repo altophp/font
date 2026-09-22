@@ -1,6 +1,8 @@
 {
     "name": "alto/font",
     "description": "Font file loading and discovery, font data inspection, format conversion, WOFF2 compression, and Unicode subsetting.",
+    "license": "MIT",
+    "type": "library",
     "keywords": [
         "font",
         "opentype",
@@ -8,15 +10,13 @@
         "woff",
         "woff2"
     ],
-    "homepage": "https://altophp.com/font",
-    "license": "MIT",
-    "type": "library",
     "authors": [
         {
             "name": "Simon André",
             "email": "smn.andre@gmail.com"
         }
     ],
+    "homepage": "https://altophp.com/font",
     "support": {
         "issues": "https://github.com/altophp/font/issues",
         "source": "https://github.com/altophp/font",

@@ -19,6 +19,8 @@ use Alto\Font\Exception\InvalidFontException;
 /**
  * Parses a source lookup header shared by GSUB and GPOS.
  *
+ * @author Simon André <smn.andre@gmail.com>
+ *
  * @internal
  */
 final readonly class LookupHeader
