@@ -1,23 +1,19 @@
-# ALTO Font
+<h1 align="center">
+  <a href="https://altophp.com/font">
+    <img src=".github/alto-font.svg" alt="ALTO Font">
+  </a>
+</h1>
 
 Inspect, convert, and subset font files from PHP. Read a font's family and
 style, find a matching face, or keep only the characters your application uses.
 
-&nbsp; ![PHP Version](https://img.shields.io/badge/PHP-8.4%2B-00B7FF?logoColor=00B7FF&labelColor=050608)
-&nbsp; ![CI](https://img.shields.io/github/actions/workflow/status/altophp/font/CI.yml?branch=main&label=Tests&labelColor=050608&color=00B7FF)
-&nbsp; [![Packagist](https://img.shields.io/packagist/v/alto/font?label=Packagist&labelColor=050608&color=00B7FF)](https://packagist.org/packages/alto/font)
-&nbsp; ![License](https://img.shields.io/github/license/altophp/font?label=License&labelColor=050608&color=00B7FF)
-&nbsp; [![GitHub Sponsors](https://img.shields.io/github/sponsors/smnandre?logo=githubsponsors&logoColor=00B7FF&label=%20Sponsor&labelColor=050608&color=00B7FF)](https://github.com/sponsors/smnandre)
-
-## Installation
-
-```sh
-composer require alto/font
-```
-
-Requires PHP 8.4+, Iconv, and Zlib. Reading WOFF2 also needs the Brotli PHP
-extension or executable; [writing WOFF2](docs/convert/woff2.md) requires an
-explicit compressor. TTF and WOFF examples need no Brotli dependency.
+<p align="center">
+  <img alt="PHP Version" src="https://img.shields.io/badge/PHP-8.4%2B-00B7FF?logoColor=00B7FF&amp;labelColor=050608">
+  <img alt="CI" src="https://img.shields.io/github/actions/workflow/status/altophp/font/CI.yml?branch=main&amp;label=Tests&amp;labelColor=050608&amp;color=00B7FF">
+  <a href="https://packagist.org/packages/alto/font"><img alt="Packagist" src="https://img.shields.io/packagist/v/alto/font?label=Packagist&amp;labelColor=050608&amp;color=00B7FF"></a>
+  <img alt="License" src="https://img.shields.io/github/license/altophp/font?label=License&amp;labelColor=050608&amp;color=00B7FF">
+  <a href="https://github.com/sponsors/smnandre"><img alt="GitHub Sponsors" src="https://img.shields.io/github/sponsors/smnandre?logo=githubsponsors&amp;logoColor=00B7FF&amp;label=%20Sponsor&amp;labelColor=050608&amp;color=00B7FF"></a>
+</p>
 
 ## Read a font
 
@@ -38,6 +34,16 @@ printf("%s %s\n", $font->metadata()->family, $font->metadata()->subfamily);
 
 For Inter Regular, this prints `Inter Regular`. See
 [Getting started](docs/getting-started.md) to check which characters it contains.
+
+## Installation
+
+```sh
+composer require alto/font
+```
+
+Requires PHP 8.4+, Iconv, and Zlib. Reading WOFF2 also needs the Brotli PHP
+extension or executable; [writing WOFF2](docs/convert/woff2.md) requires an
+explicit compressor. TTF and WOFF examples need no Brotli dependency.
 
 ## Create a smaller font for your text
 
