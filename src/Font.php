@@ -53,6 +53,26 @@ final readonly class Font
         return (new FontLoader())->load($file, $faceIndex);
     }
 
+    /**
+     * Loads a supported font container directly from bytes.
+     */
+    public static function fromBytes(string $data, int $faceIndex = 0): self
+    {
+        return new self(SfntFont::parse($data, '<memory>', $faceIndex));
+    }
+
+    /**
+     * Returns declared font-wide metrics in font units, without decoding outlines.
+     */
+    public function metrics(): FontMetrics
+    {
+        if (null !== $this->variationCoordinates) {
+            throw new UnsupportedFontException('Font-wide metrics for a selected variable-font instance are not supported yet.');
+        }
+
+        return $this->font->metrics();
+    }
+
     public function face(): FontFace
     {
         return $this->font->face();
@@ -122,11 +142,6 @@ final readonly class Font
         return $this->font->glyphIdForCodepoint($codepoint);
     }
 
-    public function glyphMetrics(GlyphId $glyphId): GlyphMetrics
-    {
-        return $this->font->glyphMetrics($glyphId, $this->variationCoordinates);
-    }
-
     /**
      * @deprecated Use glyphMetrics() instead.
      */
@@ -136,17 +151,17 @@ final readonly class Font
     }
 
     /**
-     * @deprecated Use metrics() instead.
+     * @deprecated Use glyphMetrics() instead.
      */
     public function getMetrics(GlyphId|string $glyph): GlyphMetrics
     {
-        return $this->metrics($glyph);
+        return $this->glyphMetrics($glyph);
     }
 
-    public function metrics(GlyphId|string $glyph): GlyphMetrics
+    public function glyphMetrics(GlyphId|string $glyph): GlyphMetrics
     {
         if ($glyph instanceof GlyphId) {
-            return $this->glyphMetrics($glyph);
+            return $this->font->glyphMetrics($glyph, $this->variationCoordinates);
         }
 
         $codepoints = UnicodeString::codepoints($glyph);

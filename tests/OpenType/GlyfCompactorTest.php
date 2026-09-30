@@ -39,8 +39,8 @@ final class GlyfCompactorTest extends TestCase
         self::assertSame(2, $result->retainedGlyphCount);
         self::assertSame(2, $result->font->face()->glyphCount);
         self::assertSame(1, $result->font->glyphIdForCodepoint(86)?->value);
-        self::assertSame(610, $result->font->metrics('V')->advanceWidth);
-        self::assertSame(20, $result->font->metrics('V')->leftSideBearing);
+        self::assertSame(610, $result->font->glyphMetrics('V')->advanceWidth);
+        self::assertSame(20, $result->font->glyphMetrics('V')->leftSideBearing);
     }
 
     public function testItRemapsCompoundComponents(): void
@@ -104,7 +104,7 @@ final class GlyfCompactorTest extends TestCase
 
         self::assertContains('gvar', $result->font->face()->tables);
         self::assertContains('HVAR', $result->font->face()->tables);
-        self::assertSame(700, $selected->metrics('A')->advanceWidth);
+        self::assertSame(700, $selected->glyphMetrics('A')->advanceWidth);
     }
 
     public function testItCompactsLegacyKerningPairs(): void

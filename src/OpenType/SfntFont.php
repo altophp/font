@@ -17,6 +17,8 @@ use Alto\Font\Binary\BinaryReader;
 use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\Exception\UnsupportedFontException;
 use Alto\Font\FontFace;
+use Alto\Font\FontMetrics;
+use Alto\Font\Geometry\BoundingBox;
 use Alto\Font\Glyph\Contour;
 use Alto\Font\Glyph\GlyphId;
 use Alto\Font\Glyph\GlyphMetrics;
@@ -109,6 +111,10 @@ final readonly class SfntFont
     {
         $reader = new BinaryReader($data, $path);
         $scalerType = $reader->string(0, 4);
+
+        if ('ttcf' !== $scalerType && 0 !== $faceIndex) {
+            throw new InvalidFontException(\sprintf('Standalone font "%s" has only face index 0; requested %d.', $path, $faceIndex));
+        }
 
         if ('wOFF' === $scalerType) {
             return self::parseSfntDirectory(
@@ -377,6 +383,46 @@ final readonly class SfntFont
             faceIndex: $this->faceIndex,
             faceCount: $this->faceCount,
             format: $this->format,
+        );
+    }
+
+    public function metrics(): FontMetrics
+    {
+        $head = $this->tableHeader('head', 44);
+        $hhea = $this->tableHeader('hhea', 10);
+        $post = isset($this->tables['post']) ? $this->tableHeader('post', 32) : null;
+        $os2 = isset($this->tables['OS/2']) ? $this->tableHeader('OS/2', 90) : null;
+        $xHeight = null;
+        $capHeight = null;
+        if (null !== $os2 && $os2->uint16(0) >= 2) {
+            $xHeight = $os2->int16(86) ?: null;
+            $capHeight = $os2->int16(88) ?: null;
+        }
+
+        return new FontMetrics(
+            unitsPerEm: $this->unitsPerEm,
+            ascender: $this->ascender,
+            descender: $this->descender,
+            lineGap: $hhea->int16(8),
+            bounds: new BoundingBox($head->int16(36), $head->int16(38), $head->int16(40), $head->int16(42)),
+            capHeight: $capHeight,
+            xHeight: $xHeight,
+            italicAngle: $post?->fixed16Dot16(4),
+            isFixedPitch: null === $post ? null : 0 !== $post->uint32(12),
+            embeddingFlags: $os2?->uint16(8),
+        );
+    }
+
+    /**
+     * Reads only the fixed header, even for large post tables containing glyph names.
+     */
+    private function tableHeader(string $tag, int $length): BinaryReader
+    {
+        $record = $this->tables[$tag];
+
+        return new BinaryReader(
+            $this->reader->string($record->offset, min($length, $record->length)),
+            $this->path . '#' . $tag,
         );
     }
 
