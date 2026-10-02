@@ -7,6 +7,7 @@ file unchanged. Start with the task that matches the information you need:
 - [Metadata](inspect/metadata.md) reads names, styles, versions, and license fields.
 - [Discovery](inspect/discovery.md) finds a face by family, weight, and style.
 - [Glyphs](inspect/glyphs.md) reads mappings, measurements, and outlines.
+- [Glyph names](inspect/glyph-names.md) derives Unicode text from Adobe and Unicode-style names.
 - [Variations](inspect/variations.md) explores axes and selected coordinates.
 
 The contracts below provide the exact entry points shared by those guides.
