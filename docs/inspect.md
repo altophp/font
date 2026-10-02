@@ -20,6 +20,8 @@ to `Alto\Font`.
 | Signature | Contract |
 | --- | --- |
 | `Font::fromFile(string\|Stringable $file, int $faceIndex = 0): Font` | Read a local file immediately. Detect its container from the bytes. Select a zero-based face in a TTC or OTC collection. |
+| `Font::fromBytes(string $data, int $faceIndex = 0): Font` | Load a supported container from memory. |
+| `metrics(): FontMetrics` | Declared default-instance bounds and global metrics; see [Font metrics](font-metrics.md). |
 | `face(): FontFace` | Structural data for the loaded face, including its original path, container, dimensions, glyph count, and table tags. |
 | `metadata(): FontMetadata` | Names, version, license fields, and detected format. Optional name fields may be `null`. |
 | `descriptor(): FontDescriptor` | Family, weight, style, and stretch used by font discovery. This does not implement the full CSS font-matching algorithm. |
@@ -47,8 +49,7 @@ success does not guarantee every later operation will succeed.
 | Signature | Contract |
 | --- | --- |
 | `glyphIdForCodepoint(int $codepoint): ?GlyphId` | Find the face-specific identifier for one Unicode codepoint. Return `null` when the character map has no entry. |
-| `metrics(GlyphId\|string $glyph): GlyphMetrics` | Read horizontal metrics from an identifier or a UTF-8 string containing exactly one codepoint. |
-| `glyphMetrics(GlyphId $glyphId): GlyphMetrics` | Read horizontal metrics using an identifier from this face. |
+| `glyphMetrics(GlyphId\|string $glyph): GlyphMetrics` | Read horizontal metrics from an identifier or one Unicode character. |
 | `glyphOutline(GlyphId $glyphId): GlyphOutline` | Read neutral contour geometry using an identifier from this face. An empty outline is valid, for example for a space. |
 
 `GlyphMetrics` exposes `glyphId: GlyphId`, `advanceWidth: int`, and
@@ -58,7 +59,7 @@ individual glyph before text shaping, kerning, or rasterization.
 `GlyphId::$value` is a non-negative integer. A glyph identifier is specific to
 its font; do not reuse it with another face or after compact subsetting.
 
-`metrics()` throws `InvalidTextException` for invalid UTF-8, empty text, or more
+`glyphMetrics()` throws `InvalidTextException` for invalid UTF-8, empty text, or more
 than one codepoint. A missing character throws `GlyphNotFoundException`.
 Identifier-based reads can throw `InvalidFontException` for an out-of-range
 identifier or malformed glyph data. Unsupported outline structures throw
@@ -101,3 +102,10 @@ selection, policy defaults, result fields, and failure boundaries.
 
 The older `getFace()`, `getDescriptor()`, `getGlyphMetrics()`, and `getMetrics()`
 aliases are deprecated. Use their counterparts without `get` in new code.
+
+## Font-wide metrics and embedded bytes
+
+Use `metrics()` for declared bounds, line metrics and optional embedding
+metadata. `Font::fromBytes()` loads a supported container without an input file.
+See [Font metrics](font-metrics.md) for units, absent values and variable-font
+limitations.

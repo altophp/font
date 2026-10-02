@@ -53,12 +53,12 @@ if (null === $variations || !$variations->hasAxis('wght')) {
 
 $bold = $font->withVariations(['wght' => 700]);
 
-printf("Default A advance: %g\n", $font->metrics('A')->advanceWidth);
-printf("Selected A advance: %g\n", $bold->metrics('A')->advanceWidth);
+printf("Default A advance: %g\n", $font->glyphMetrics('A')->advanceWidth);
+printf("Selected A advance: %g\n", $bold->glyphMetrics('A')->advanceWidth);
 ```
 
 Both values are in font design units. They may be equal if that glyph's advance
-does not vary. Use `$bold->glyphOutline($bold->metrics('A')->glyphId)` to read
+does not vary. Use `$bold->glyphOutline($bold->glyphMetrics('A')->glyphId)` to read
 its selected outline as well. The original `$font` remains unchanged.
 
 Values outside an axis range are clamped. Unknown axes and selections on

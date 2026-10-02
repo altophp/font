@@ -24,11 +24,11 @@ echo null === $glyphId ? "é is missing\n" : "é is available\n";
 `glyphIdForCodepoint()` returns `null` when the font's character map has no
 entry. It does not perform font fallback.
 
-When working with one character, `metrics()` resolves it and reports a
+When working with one character, `glyphMetrics()` resolves it and reports a
 clear failure if it is absent:
 
 ```php
-$metrics = $font->metrics('A');
+$metrics = $font->glyphMetrics('A');
 
 printf("Glyph: %d\n", $metrics->glyphId->value);
 printf("Advance: %d\n", $metrics->advanceWidth);

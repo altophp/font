@@ -110,8 +110,8 @@ final class FontFinderTest extends TestCase
         );
 
         self::assertSame(['wght' => 800.0, 'wdth' => 75.0], $font->variationCoordinates()?->values);
-        self::assertSame(560, $font->metrics('A')->advanceWidth);
-        self::assertSame(4, $font->metrics('A')->leftSideBearing);
+        self::assertSame(560, $font->glyphMetrics('A')->advanceWidth);
+        self::assertSame(4, $font->glyphMetrics('A')->leftSideBearing);
     }
 
     public function testItPrefersVariableCandidatesOverApproximateStaticCandidates(): void
@@ -124,7 +124,7 @@ final class FontFinderTest extends TestCase
         );
 
         self::assertSame(['wght' => 800.0, 'wdth' => 100.0], $font->variationCoordinates()?->values);
-        self::assertSame(680, $font->metrics('A')->advanceWidth);
+        self::assertSame(680, $font->glyphMetrics('A')->advanceWidth);
     }
 
     public function testItCreatesDirectoryAndSystemFinders(): void

@@ -128,7 +128,7 @@ final class FontLoaderTest extends TestCase
         self::assertEquals($font->face(), $font->getFace());
         self::assertEquals($font->glyphMetrics($glyphId), $font->getGlyphMetrics($glyphId));
 
-        $metrics = $font->metrics('A');
+        $metrics = $font->glyphMetrics('A');
 
         self::assertSame(600, $metrics->advanceWidth);
         self::assertSame(10, $metrics->leftSideBearing);
@@ -177,7 +177,7 @@ final class FontLoaderTest extends TestCase
         $this->expectException(InvalidTextException::class);
         $this->expectExceptionMessage('Font metrics can only be read for a single glyph or character.');
 
-        $font->metrics('AV');
+        $font->glyphMetrics('AV');
     }
 
     public function testItExportsSimpleGlyphOutlinesAsRawContours(): void
@@ -207,7 +207,7 @@ final class FontLoaderTest extends TestCase
         $this->expectException(GlyphNotFoundException::class);
         $this->expectExceptionMessage('Font has no glyph for codepoint U+0042.');
 
-        $font->metrics('B');
+        $font->glyphMetrics('B');
     }
 
     public function testItRejectsMissingFiles(): void
