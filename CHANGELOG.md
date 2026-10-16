@@ -2,40 +2,51 @@
 
 ## [Unreleased]
 
-- Reserve `Font::metrics()` for font-wide metrics. Migrate development calls
-  from `metrics($glyph)` to `glyphMetrics($glyph)`; the latter now accepts a
-  glyph ID or one UTF-8 character. The released `getMetrics($glyph)` and
-  `getGlyphMetrics($id)` aliases retain their glyph-metric behavior.
+## [0.9.0] - 2026-10-16
 
-- Load supported font containers directly from memory with `Font::fromBytes()`.
-- Expose declared font bounds, line metrics, cap/x heights, italic angle,
-  fixed-pitch status and raw embedding flags through `Font::metrics()`.
-  Selected variable-font views are explicitly unsupported by this new API.
-- Reject nonzero face indexes for standalone fonts, consistently for file and
-  bytes loading. Previously these indexes were silently accepted.
+### Added
 
-- Reduce and split oversized GPOS PairPos class matrices, with a glyph-pair
-  fallback for rows that cannot fit internal 16-bit offsets.
-- Compact legacy `kern` format 0 pairs and vertical `vhea`, `vmtx`, and VVAR
-  mappings when glyph IDs are renumbered.
-- Compact every standard GSUB and GPOS lookup type, including contextual,
-  chained, mark, cursive, alternate, reverse-chaining, and extension lookups.
-- Preserve OpenType Layout 1.1 feature variations and relocate Device and
-  VariationIndex data referenced by positioning records.
-- Add documentation.
-- Write supported faces as standalone SFNT, WOFF, and WOFF2 files.
-- Create conservative Unicode subsets with optional glyph compaction, layout
+- Write a loaded face as a standalone TTF, WOFF, or WOFF2 file with
+  `SfntWriter`, `WoffWriter`, and `Woff2Writer`, including a single face
+  extracted from a collection.
+- Create Unicode subsets with `Font::subset()`, `SubsetOptions`, `UnicodeSet`,
+  and `UnicodeRange`, with policies for glyph renumbering, layout
   preservation, and hint removal.
-- Preserve variable-font axes and per-glyph `gvar` and HVAR data while
-  subsetting.
-- Add native and process-backed Brotli compression adapters for WOFF2 output.
-- Add canonical `descriptor()` and `glyphMetrics()` APIs, font-discovery diagnostics,
-  and dedicated text and missing-glyph exceptions.
+- Preserve ligatures, contextual substitutions, mark positioning, kerning, and
+  OpenType feature variations in compact subsets, including oversized
+  pair-positioning tables and legacy `kern` data.
+- Keep variable-font axes, glyph variations, horizontal and vertical metrics,
+  and ligature caret adjustments when subsetting; `Font::withoutVariations()`
+  drops them on request.
+- Choose WOFF2 compression through `BrotliExtensionCompressor`,
+  `BrotliProcessCompressor`, and `BrotliCompressionProfile`.
+- Load supported containers from memory with `Font::fromBytes()`.
+- Read declared font-wide bounds, line metrics, cap and x heights, italic
+  angle, fixed-pitch status, and embedding flags with `Font::metrics()`.
+- Read the canonical face descriptor with `Font::descriptor()`.
+- Inspect skipped font-discovery candidates through diagnostics.
+- Distinguish invalid text from missing characters with `InvalidTextException`
+  and `GlyphNotFoundException`; report write and compression failures with
+  `FontWriteException` and `CompressionException`.
 
-## [0.8.0]
+### Changed
+
+- `Font::glyphMetrics()` accepts a glyph ID or one UTF-8 character.
+- Standalone fonts reject a nonzero face index for file and bytes loading.
+
+### Deprecated
+
+- `Font::getFace()`, `getDescriptor()`, `getGlyphMetrics()`, and `getMetrics()`:
+  use `face()`, `descriptor()`, and `glyphMetrics()`.
+
+## [0.8.0] - 2026-08-10
 
 - Support transformed WOFF2 `glyf`, `loca`, and `hmtx` tables.
 
-## [0.7.0]
+## [0.7.0] - 2026-08-10
 
 - Initial release.
+
+[0.9.0]: https://github.com/altophp/font/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/altophp/font/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/altophp/font/releases/tag/v0.7.0
