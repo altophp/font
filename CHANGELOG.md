@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-16
+
 ### Added
 
 - Convert glyph names to UTF-8 with `GlyphName::toUnicode()`, using the complete
@@ -52,6 +54,7 @@
 
 - Initial release.
 
+[0.10.0]: https://github.com/altophp/font/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/altophp/font/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/altophp/font/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/altophp/font/releases/tag/v0.7.0
