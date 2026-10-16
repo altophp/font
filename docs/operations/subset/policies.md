@@ -9,7 +9,7 @@ option at a time and compare the output in the application that uses it.
 | Hinting | `HintingPolicy::Keep` | Try `Drop` if smaller output matters more than preserving small-size rendering |
 | Text layout | `LayoutPolicy::Preserve` | Remove data only for controlled content that does not need it |
 
-![Three WOFF subsets of the same Inter text: default retains 518 slots, compact reduces them to 104, and dropping hinting changes the size again.](../assets/figures/subset-options.svg)
+![Three WOFF subsets of the same Inter text: default retains 518 slots, compact reduces them to 104, and dropping hinting changes the size again.](../../assets/figures/subset-options.svg)
 
 All three examples retain 104 glyphs and preserve layout. Default output is
 19,784 bytes with 518 slots; compact output is 8,308 bytes with 104 slots.
@@ -49,7 +49,7 @@ printf("Saved inter-compact.woff (%d bytes)\n", filesize($destination));
 Compact mode closes gaps in glyph numbering and rewrites the related data.
 Compare its file size with a default subset written in the same format.
 It can reject fonts containing structures that cannot be safely rewritten;
-see the [support reference](opentype.md).
+see the [support reference](../../tables.md).
 
 Keep the default if another part of your application stores original glyph
 identifiers. Compact mode also removes glyph names. Even with matching
@@ -94,7 +94,7 @@ query, call `withoutVariations()` before subsetting. This returns to the full
 variable source; it does not keep only the selected weight.
 
 Always review `SubsetResult::$warnings`. For precise table and offset limits,
-see [OpenType subsetting support](opentype.md).
+see [OpenType subsetting support](../../tables.md).
 
 ## Check output size and rendering
 

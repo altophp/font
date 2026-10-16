@@ -1,13 +1,13 @@
 # Use font writers
 
 Writers keep the selected face and change its output container. They do not
-reduce the character or glyph set. Use [Create a font subset](../subset.md)
+reduce the character or glyph set. Use [Create a font subset](subset.md)
 first when the output should contain fewer glyphs.
 
 The examples assume Composer's autoloader is loaded, a source font exists at
 `fonts/Inter-Regular.ttf`, and `output` exists. Run the first example with the
 PHP Brotli extension installed; it creates three new font files and prints
-nothing. Use [Convert a font](../convert.md) for a complete first script.
+nothing. Use [Convert a font](../operations.md) for a complete first script.
 
 ## Write SFNT, WOFF, and WOFF2
 
@@ -75,7 +75,7 @@ They expose the same two methods:
 
 `SfntWriter` and `WoffWriter` need no constructor arguments.
 `Woff2Writer` requires a `BrotliCompressorInterface`; see
-[WOFF2 compression](woff2.md) for the available adapters.
+[WOFF2 compression](compress.md) for the available adapters.
 
 ## Understand reconstruction
 
@@ -105,13 +105,22 @@ equivalent, not necessarily byte-for-byte identical.
 These exceptions implement `FontExceptionInterface`. A selected variable view
 created with `withVariations()` cannot be written as a static font.
 
-See [WOFF2 compression](woff2.md) for Brotli configuration and
+See [WOFF2 compression](compress.md) for Brotli configuration and
 memory behavior.
 
 Create the destination directory before writing and choose a new filename for
 a rerun: writers do not create directories or overwrite files. For compression
-or temporary-storage failures, check the [WOFF2 runtime](woff2.md#check-the-runtime).
+or temporary-storage failures, check the [WOFF2 runtime](compress.md#check-the-runtime).
 
 A selected variable view is read-only. Use `withoutVariations()` to write the
 original variable font with all its axes, or supply a static source font when
-you need a fixed-weight file. See [Variable fonts](../inspect/variations.md).
+you need a fixed-weight file. See [Variable fonts](../tables/variations.md).
+
+## Produce bytes in memory
+
+| Signature | Contract |
+| --- | --- |
+| `toSfnt(): string` | Return the complete standalone SFNT bytes in memory. It does not write a file. |
+| `subset(SubsetOptions $options): SubsetResult` | Return a new font and a report for the character selection and policies. It does not modify or write the source. |
+
+See [Subset](subset.md) for character selection, policies, and result fields.

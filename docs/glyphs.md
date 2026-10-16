@@ -4,7 +4,7 @@ Font files map Unicode code points to glyph identifiers. Glyph identifiers are
 font-specific and must not be reused with another font.
 
 If you already have a glyph name such as `eacute` or `f_f_i`, use
-[`GlyphName::toUnicode()`](glyph-names.md) to derive its Unicode text without
+[`GlyphName::toUnicode()`](glyphs/names.md) to derive its Unicode text without
 loading a font.
 
 ## Resolve a character
@@ -53,7 +53,7 @@ $metrics = $font->glyphMetrics($glyphId);
 
 The advance width and side bearing use the font's design units, not pixels.
 
-![Inter A annotated with its baseline, glyph origin, next origin, 1413-unit advance and 52-unit left side bearing.](../assets/figures/glyph-metrics.svg)
+![Inter A annotated with its baseline, glyph origin, next origin, 1413-unit advance and 52-unit left side bearing.](assets/figures/glyph-metrics.svg)
 
 In this Inter fixture, `A` advances by 1,413 units and has a 52-unit left side
 bearing. Advance width is the distance to the next origin before shaping;
@@ -79,7 +79,7 @@ foreach ($outline->contours as $contour) {
 commands. ALTO Font exposes this neutral geometry without serializing it to
 SVG, a bitmap, or another drawing format.
 
-![Inter o with contour endpoints and quadratic control points, plus a magnified real quadratic segment.](../assets/figures/glyph-contours.svg)
+![Inter o with contour endpoints and quadratic control points, plus a magnified real quadratic segment.](assets/figures/glyph-contours.svg)
 
 Filled points are contour endpoints; hollow points are quadratic controls.
 The enlarged segment is taken directly from `glyphOutline()`. A control point
@@ -108,3 +108,30 @@ $scaled = $outline->transform(
 
 The example scales the outline to 16 units, flips the font's upward Y axis,
 and moves the baseline. It still does not draw the result.
+
+## Contracts
+
+| Signature | Contract |
+| --- | --- |
+| `glyphIdForCodepoint(int $codepoint): ?GlyphId` | Find the face-specific identifier for one Unicode codepoint. Return `null` when the character map has no entry. |
+| `glyphMetrics(GlyphId\|string $glyph): GlyphMetrics` | Read horizontal metrics from an identifier or one Unicode character. |
+| `glyphOutline(GlyphId $glyphId): GlyphOutline` | Read neutral contour geometry using an identifier from this face. An empty outline is valid, for example for a space. |
+
+`GlyphMetrics` exposes `glyphId: GlyphId`, `advanceWidth: int`, and
+`leftSideBearing: int`. Measurements use font design units. They describe an
+individual glyph before text shaping, kerning, or rasterization.
+
+`GlyphId::$value` is a non-negative integer. A glyph identifier is specific to
+its font; do not reuse it with another face or after compact subsetting.
+
+`glyphMetrics()` throws `InvalidTextException` for invalid UTF-8, empty text, or more
+than one codepoint. A missing character throws `GlyphNotFoundException`.
+Identifier-based reads can throw `InvalidFontException` for an out-of-range
+identifier or malformed glyph data. Unsupported outline structures throw
+`UnsupportedFontException`.
+
+`GlyphOutline` exposes `glyphId` and a list of `contours`. Each contour exposes
+its `commands` (`M`, `L`, `Q`, or `Z`). `isEmpty(): bool` reports whether there
+are no contours. `transform(float $xx, float $yx, float $xy, float $yy,
+float $dx, float $dy): GlyphOutline` returns a new affine-transformed outline.
+It does not write SVG or draw pixels. See [Outlines](#read-an-outline).

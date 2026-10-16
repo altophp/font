@@ -76,7 +76,7 @@ The illustration uses the bundled variable-font fixture.
 ## Return to the source for conversion or subsetting
 
 `$bold->withoutVariations()` returns the original variable source with all its
-axes. It does not freeze weight 700. A weighted [finder query](discovery.md)
+axes. It does not freeze weight 700. A weighted [finder query](../operations/find.md)
 can also return a selected view, with the same writing restrictions.
 
 ## Coordinate API
@@ -88,3 +88,21 @@ Pass an array to `withVariations()` as above, or build a
 Measurements and outlines use supported TrueType variation data (`avar`,
 `gvar`, and `HVAR`). Text shaping and rendering at those coordinates are the
 responsibility of the application using the font.
+
+## Contracts
+
+| Signature | Contract |
+| --- | --- |
+| `variations(): ?FontVariations` | Return axes and named instances, or `null` for a static face. |
+| `withVariations(array\|VariationCoordinates $coordinates): Font` | Return a new view at the requested axis coordinates. Array keys are axis tags; values are integers or floats. Unspecified axes use their defaults. Out-of-range values are clamped. |
+| `variationCoordinates(): ?VariationCoordinates` | Return resolved selected coordinates, or `null` when no view was selected. |
+| `withoutVariations(): Font` | Return the unselected variable source. If no view is selected, return the same object. |
+
+Selecting coordinates on a static font or supplying an unknown axis raises
+`InvalidFontException`. `FontVariations::$axes` contains the axis tag, minimum,
+default, maximum, flags, and optional name. `instances` contains named presets.
+
+Selected views affect supported glyph measurements and outlines. They do not
+create a static font. Writing or subsetting such a view throws
+`UnsupportedFontException`; use `withoutVariations()` to work with the original
+variable font and all of its axes.

@@ -52,7 +52,7 @@ weight or width requests through its axes.
 **A variable result with selected coordinates cannot be written or subsetted.**
 Use `withoutVariations()` to work with its original variable source; that
 retains all axes rather than exporting only the requested weight. See
-[Variable fonts](variations.md).
+[Variable fonts](../tables/variations.md).
 
 For more query options, use `stretch(new FontStretch(100))`, or pass weight and
 style directly to `get()` or `find()` with `FontStyle` values.

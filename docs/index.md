@@ -19,14 +19,15 @@ A font containing the capital letter A prints `A is available`.
 
 ## Documentation
 
-- [Installation](installation.md): install the package and verify Composer autoloading.
-- [Getting started](getting-started.md): load a font and check its character coverage.
-- [Fonts](fonts.md): understand files, faces, families, characters, and glyphs.
-- [Inspect](inspect.md): read files, metadata, glyphs, and variable-font data.
-- [Font metrics](font-metrics.md): load bytes and inspect font-wide bounds and embedding metadata.
-- [Convert](convert.md): write TTF, WOFF, and WOFF2 output.
-- [Subset](subset.md): keep selected characters and control the resulting font.
-- [Formats](formats.md): check supported containers, outlines, and runtime requirements.
+- [Installation](installation.md): add the package with Composer and run a smoke test.
+- [Getting started](getting-started.md): check that a font covers the characters of your text.
+- [Operations](operations.md): find, read, subset, compress, and write fonts, from a file on disk to a delivered web font.
+- [Fonts](fonts.md): families, faces, and files, and what a loaded face exposes.
+- [Glyphs](glyphs.md): map characters to glyphs, measure them, and trace their outlines.
+- [Formats](formats.md): supported containers and outlines, detected by signature.
+- [Tables](tables.md): the sfnt table structure, and what the package keeps, rewrites, or rejects.
+- [Errors](errors.md): the exceptions the package raises and how to recover.
+- [Troubleshooting](troubleshooting.md): symptoms, causes, and fixes.
 
 ## Boundaries
 

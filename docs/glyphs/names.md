@@ -50,7 +50,7 @@ Adobe mapping and the same Unicode-name rules.
 
 This API interprets names provided by the caller. It does not read names from
 a font's `post` table, resolve a glyph ID, check character coverage, or shape
-text. Use [`Font::glyphIdForCodepoint()`](glyphs.md) to look up a character in
+text. Use [`Font::glyphIdForCodepoint()`](../glyphs.md) to look up a character in
 a loaded font. PDF encoding dictionaries and `/ToUnicode` maps belong to the
 PDF reader.
 

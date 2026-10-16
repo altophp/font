@@ -48,7 +48,7 @@ printf(
 
 For a regular face, values typically describe weight 400, normal style, and
 100% stretch. They are inferred from subfamily names and are used by
-[font discovery](discovery.md); they do not implement the full CSS matching rules.
+[font discovery](../operations/find.md); they do not implement the full CSS matching rules.
 
 ## Read dimensions and glyph counts
 
@@ -58,7 +58,7 @@ pixels, multiply it by `16 / $font->face()->unitsPerEm`.
 
 For collections, `faceIndex` identifies the selected face and `faceCount`
 reports the number of faces. `tables` lists OpenType table tags; it does not
-expose raw table bytes. See [Glyphs](glyphs.md) for individual measurements.
+expose raw table bytes. See [Glyphs](../glyphs.md) for individual measurements.
 
 ## Names and languages
 

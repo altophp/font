@@ -70,8 +70,8 @@ whole phrase will shape or render correctly.
 
 ## Continue with your font
 
-Continue with [Read metadata](inspect/metadata.md) to inspect version, style, and
-license fields. If file, face, or glyph terminology is unfamiliar, read
-[Font concepts](fonts.md).
+Continue with [Metadata](fonts/metadata.md) to read version, style, and license
+fields, or with [Operations](operations.md) to subset, compress, or write the
+font. If file, face, or glyph terminology is unfamiliar, read [Fonts](fonts.md).
 
-If loading fails, see [loading failures](inspect/font-files.md#when-a-font-will-not-load).
+If loading fails, see [Troubleshooting](troubleshooting.md#the-font-will-not-load).

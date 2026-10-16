@@ -34,14 +34,14 @@ printf("%d of %d requested characters found\n", $result->mappedCodepointCount, c
 The result is a loadable WOFF file at `output/inter-subset.woff`. The script
 prints its actual size and how many requested codepoints the source contains.
 The original font stays unchanged. For WOFF2 output, use the
-[WOFF2 writer with a Brotli compressor](convert/woff2.md).
+[WOFF2 writer with a Brotli compressor](compress.md).
 
 The defaults preserve hinting and text layout data, including the glyphs needed
 for supported substitutions and compound characters. Extra glyphs may therefore
 remain. File-size savings depend on the source and selection; compare the
 original and subset in the same output format when measuring subsetting alone.
 
-![Before and after: selected uppercase letters and digits remain available in the Inter subset; crossed cells are no longer mapped.](assets/figures/subset-before-after.svg)
+![Before and after: selected uppercase letters and digits remain available in the Inter subset; crossed cells are no longer mapped.](../assets/figures/subset-before-after.svg)
 
 For this Inter sample, writing the complete face as WOFF produces **31,792
 bytes**, versus **19,784 bytes** for the default subset. The grid shows only
@@ -93,8 +93,8 @@ retained glyph count.
 ## Adjust the selection or size
 
 - [Build Unicode sets](subset/characters.md) from translations, codepoints, or CSS ranges.
-- [Choose subset options](subset/options.md) to compact glyph numbers or remove hinting or layout data.
-- [Check output size and rendering](subset/options.md#check-output-size-and-rendering) if a font is unsupported or its rendering changes.
+- [Choose subset options](subset/policies.md) to compact glyph numbers or remove hinting or layout data.
+- [Check output size and rendering](subset/policies.md#check-output-size-and-rendering) if a font is unsupported or its rendering changes.
 
 Subsetting supports TrueType outlines. Variable fonts retain their axes; this
 does not export a fixed weight. Test the generated font with your actual text
@@ -103,8 +103,8 @@ in the browser or application where it will be used.
 ## Subset guides
 
 - [Characters](subset/characters.md) builds selections from text, codepoints, ranges, and CSS syntax.
-- [Options](subset/options.md) controls glyph numbering, hinting, and text-layout data.
-- [OpenType](subset/opentype.md) records the table-level preservation and rewriting boundaries.
+- [Options](subset/policies.md) controls glyph numbering, hinting, and text-layout data.
+- [OpenType](../tables.md) records the table-level preservation and rewriting boundaries.
 
 ## Result data
 
@@ -138,3 +138,28 @@ layout offsets. Both implement `FontExceptionInterface`.
 Supported variable fonts retain their axes. Subsetting does not export a static
 instance or restrict axis ranges. Use the original source, or call
 `withoutVariations()` before subsetting a selected view.
+
+## Subset before embedding
+
+```php
+use Alto\Font\Font;
+use Alto\Font\Subset\GlyphIdPolicy;
+use Alto\Font\Subset\SubsetOptions;
+use Alto\Font\Subset\UnicodeSet;
+
+$font = Font::fromFile(__DIR__.'/fonts/Inter-Regular.ttf');
+$result = $font->subset(new SubsetOptions(
+    UnicodeSet::fromText('Hello world'),
+    glyphIds: GlyphIdPolicy::Compact,
+));
+$subset = $result->font;
+$bytes = $subset->toSfnt();
+$metrics = $subset->metrics();
+$glyphId = $subset->glyphIdForCodepoint(0x48);
+```
+
+Verify required character coverage before subsetting; inspect result warnings.
+Resolve glyph IDs and widths from the returned font because compact mode can
+renumber glyphs. A PDF adapter remains responsible for subset font names,
+PDF-unit conversion, font dictionaries, CID mappings and ToUnicode maps.
+See [Subsetting](subset.md) for the complete selection and policy contract.

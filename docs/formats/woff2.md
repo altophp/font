@@ -26,7 +26,7 @@ printf("Saved inter.woff2 (%d bytes)\n", filesize($destination));
 ```
 
 This writes `output/inter.woff2` and prints its actual byte size.
-To write a subset, pass `$result->font` from the [subset workflow](../subset.md)
+To write a subset, pass `$result->font` from the [subset workflow](../operations/subset.md)
 to the same writer.
 
 ## With the Brotli executable

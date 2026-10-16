@@ -25,8 +25,13 @@ identifier is not a Unicode codepoint.
 ## Follow the data
 
 1. Read [Formats](formats.md) to confirm that the container and outline are supported.
-2. Use [Font files](inspect/font-files.md) to load a known path or discover a matching file.
-3. Use [Font data](inspect.md) to inspect the selected face.
+2. Use [Font files](operations/read.md) to load a known path or discover a matching file.
+3. Use [Font data](fonts/metadata.md) to inspect the selected face.
 
-After loading and inspecting a face, continue with [Conversion](convert.md),
-[Compression](convert/compression.md), or [Subsetting](subset.md).
+After loading and inspecting a face, continue with [Conversion](operations/write.md),
+[Compression](operations/compress.md), or [Subsetting](operations/subset.md).
+
+## Read a face
+
+- [Metadata](fonts/metadata.md) reads names, version, and license fields.
+- [Metrics](fonts/metrics.md) reads font-wide bounds, line metrics, and embedding flags.

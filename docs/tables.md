@@ -2,7 +2,7 @@
 
 This reference describes the table-level limits of subsetting. Start with
 [Create a subset](../subset.md) for a working example, or
-[Choose subset options](options.md) for application decisions.
+[Choose subset options](operations/subset/policies.md) for application decisions.
 
 ## Compact glyph IDs
 
@@ -85,3 +85,5 @@ Removing glyphs used by that renderer can also affect retained glyphs.
 
 The [Recursive rendering diagnosis](https://github.com/altophp/font/blob/main/tests/Validation/RECURSIVE_RENDERING.md)
 contains the reproducible CoreText evidence and the limits of its workaround.
+
+See [Variable fonts](tables/variations.md) for axes, instances, and selected views.

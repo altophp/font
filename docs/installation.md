@@ -30,9 +30,4 @@ ALTO Font is ready
 
 This checks the Composer setup without requiring a font file. Continue with
 [Getting started](getting-started.md) to load a font and inspect its characters.
-
-## If a font cannot be loaded
-
-Loading failures implement `Alto\Font\Exception\FontExceptionInterface`.
-Unsupported font features raise `UnsupportedFontException`; malformed files
-and invalid selections raise `InvalidFontException`.
+Loading failures raise the exceptions listed in [Errors](errors.md).

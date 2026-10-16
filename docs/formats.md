@@ -16,7 +16,7 @@ extension.
 | Color glyphs | Not supported | COLR, CPAL, SVG, sbix, CBDT, and CBLC are not rendered |
 
 Container and outline support does not guarantee that every table can be
-rewritten for compact subsetting. See [OpenType subsetting support](subset/opentype.md)
+rewritten for compact subsetting. See [Tables](tables.md)
 for layout offset limits and the boundaries of variable-font compaction.
 Static variable-font export and axis-range reduction are not supported.
 
@@ -43,24 +43,7 @@ If neither is available, loading a WOFF2 file fails rather than silently
 returning incomplete data.
 
 WOFF2 support includes transformed `glyf`, `loca`, and `hmtx` tables for
-single-font files.
+single-font files. See [WOFF2](formats/woff2.md) for reading and writing
+requirements.
 
-## Failure types
-
-Catch the shared interface when the recovery action is the same for every
-font-loading problem:
-
-```php
-use Alto\Font\Exception\FontExceptionInterface;
-use Alto\Font\Font;
-
-try {
-    $font = Font::fromFile($path);
-} catch (FontExceptionInterface $error) {
-    // Reject the file or try another candidate.
-}
-```
-
-Use `UnsupportedFontException` when you need to distinguish a valid but
-unsupported feature from an `InvalidFontException` caused by malformed data
-or an invalid selection.
+Loading failures raise the exceptions described in [Errors](errors.md).
