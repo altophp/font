@@ -3,6 +3,10 @@
 Font files map Unicode code points to glyph identifiers. Glyph identifiers are
 font-specific and must not be reused with another font.
 
+If you already have a glyph name such as `eacute` or `f_f_i`, use
+[`GlyphName::toUnicode()`](glyph-names.md) to derive its Unicode text without
+loading a font.
+
 ## Resolve a character
 
 Place a font at `fonts/Inter-Regular.ttf` and run this script beside `vendor`.

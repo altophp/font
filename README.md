@@ -90,6 +90,7 @@ depends on the source font and the selected characters.
 | Read a font's family, style, or license fields | [Read metadata](docs/inspect/metadata.md) |
 | Check whether a font contains my characters | [Getting started](docs/getting-started.md) |
 | Inspect files, metadata, glyphs, and variations | [Inspect fonts](docs/inspect.md) |
+| Convert glyph names to Unicode text | [Glyph names](docs/inspect/glyph-names.md) |
 | Convert a font to TTF, WOFF, or WOFF2 | [Convert a font](docs/convert.md) |
 | Reduce a font to the text I use | [Create a subset](docs/subset.md) |
 | Find a font by family, weight, and style | [Find a font](docs/inspect/discovery.md) |

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- Convert glyph names to UTF-8 with `GlyphName::toUnicode()`, using the complete
+  Adobe Glyph List, Unicode-name rules, and optional Zapf Dingbats mappings.
+
 ## [0.9.0] - 2026-10-16
 
 ### Added
