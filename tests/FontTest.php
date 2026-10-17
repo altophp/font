@@ -627,6 +627,60 @@ final class FontTest extends TestCase
         self::assertSame('M 150 0 L 350 700 L 550 0 L 150 0 Z', self::describeContour($result->font->glyphOutline(new GlyphId(4))->contours[0]));
     }
 
+    public function testItLoadsAFullRangeCharacterMapWithinBoundedMemory(): void
+    {
+        $path = self::temporaryPath('full-range-cmap.ttf');
+        TinyTrueTypeFont::writeWithCmap($path, self::format12Cmap(0, 0x10FFFF, 0));
+        $before = memory_get_usage();
+
+        $font = Font::fromFile($path);
+
+        self::assertLessThan(1 << 20, memory_get_usage() - $before, 'A full-range cmap must not be expanded per codepoint.');
+        self::assertSame(4, $font->glyphIdForCodepoint(4)?->value);
+        self::assertSame(0x10FFFF, $font->glyphIdForCodepoint(0x10FFFF)?->value);
+        self::assertNull($font->glyphIdForCodepoint(0x110000));
+    }
+
+    public function testItRejectsACharacterMapSpanningTheWholeUint32Range(): void
+    {
+        $path = self::temporaryPath('uint32-cmap.ttf');
+        TinyTrueTypeFont::writeWithCmap($path, self::format12Cmap(0, 0xFFFFFFFF, 1));
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('cmap format 12 group 0 ends beyond U+10FFFF.');
+
+        Font::fromFile($path);
+    }
+
+    public function testItRejectsACharacterMapWithOverlappingSegments(): void
+    {
+        $path = self::temporaryPath('overlapping-cmap.ttf');
+        $segments = '';
+        $segmentCount = 64;
+
+        for ($segment = 0; $segment < $segmentCount; ++$segment) {
+            $segments .= pack('n', $segment === $segmentCount - 1 ? 0xFFFF : 0xFFFE);
+        }
+
+        $starts = str_repeat(pack('n', 0), $segmentCount - 1) . pack('n', 0xFFFF);
+        $body = pack('n5', 0, $segmentCount * 2, 0, 0, 0) . $segments . pack('n', 0) . $starts
+            . str_repeat(pack('n', 1), $segmentCount) . str_repeat(pack('n', 0), $segmentCount);
+        TinyTrueTypeFont::writeWithCmap(
+            $path,
+            pack('n4N', 0, 1, 3, 1, 12) . pack('n2', 4, 4 + \strlen($body)) . $body,
+        );
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('cmap format 4 segments must be sorted and must not overlap.');
+
+        Font::fromFile($path);
+    }
+
+    private static function format12Cmap(int $start, int $end, int $glyphId): string
+    {
+        return pack('n4N', 0, 1, 3, 10, 12) . pack('n2N3', 12, 0, 28, 0, 1) . pack('N3', $start, $end, $glyphId);
+    }
+
     private static function fontPath(): string
     {
         $path = sys_get_temp_dir() . '/alto-font-font-' . bin2hex(random_bytes(4)) . '.ttf';

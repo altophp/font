@@ -43,6 +43,7 @@ final class CmapBuilderTest extends TestCase
     {
         $cmap = CmapTable::parse(new BinaryReader(CmapBuilder::build([]), 'empty cmap'));
 
-        self::assertSame([], $cmap->mappings());
+        self::assertSame([], iterator_to_array($cmap->mappings()));
+        self::assertCount(0, $cmap);
     }
 }

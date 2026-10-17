@@ -49,6 +49,15 @@ final class TinyTrueTypeFont
         file_put_contents($path, self::sfnt($tables));
     }
 
+    public static function writeWithCmap(string $path, string $cmap): void
+    {
+        $tables = self::tables(compoundCycle: false, unsupportedCff: false);
+        $tables['cmap'] = $cmap;
+        ksort($tables);
+
+        file_put_contents($path, self::sfnt($tables));
+    }
+
     public static function writeWithCubicPoint(string $path): void
     {
         $glyph = self::simpleGlyph([[100, 0], [300, 700], [500, 0]]);

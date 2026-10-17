@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- The character map keeps its segments instead of one entry per codepoint, so a
+  crafted `cmap` can no longer exhaust memory or CPU while a font loads.
+- Unsorted or overlapping `cmap` segments and groups are rejected.
+
 ## [0.10.1] - 2026-10-17
 
 ### Fixed
