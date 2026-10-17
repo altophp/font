@@ -127,6 +127,61 @@ final class FontFinderTest extends TestCase
         self::assertSame(680, $font->glyphMetrics('A')->advanceWidth);
     }
 
+    public function testFamilyOnlyQueryPrefersTheRegularFaceOverBold(): void
+    {
+        $bold = self::namedFontPath('finder-bold', 'Bold');
+        $regular = self::namedFontPath('finder-regular', 'Regular');
+        $finder = FontFinder::fromLocator(self::locator($bold, $regular));
+
+        self::assertSame('Regular', $finder->get('Atelier Tiny')->descriptor()->subfamily);
+    }
+
+    public function testFamilyOnlyQueryPrefersUprightOverItalic(): void
+    {
+        $italic = self::namedFontPath('finder-italic', 'Italic');
+        $regular = self::namedFontPath('finder-upright', 'Regular');
+        $finder = FontFinder::fromLocator(self::locator($italic, $regular));
+
+        self::assertSame(FontStyle::Normal, $finder->get('Atelier Tiny')->descriptor()->style);
+    }
+
+    public function testFamilyOnlyQueryPrefersNormalWidthOverCondensed(): void
+    {
+        $condensed = self::namedFontPath('finder-condensed', 'Condensed');
+        $regular = self::namedFontPath('finder-normal-width', 'Regular');
+        $finder = FontFinder::fromLocator(self::locator($condensed, $regular));
+
+        self::assertSame(100, $finder->get('Atelier Tiny')->descriptor()->stretch->percentage);
+    }
+
+    public function testExplicitWeightStillSelectsTheBoldFace(): void
+    {
+        $regular = self::namedFontPath('finder-weight-regular', 'Regular');
+        $bold = self::namedFontPath('finder-weight-bold', 'Bold');
+        $finder = FontFinder::fromLocator(self::locator($regular, $bold));
+
+        self::assertSame('Bold', $finder->get('Atelier Tiny', weight: 700)->descriptor()->subfamily);
+        self::assertSame('Bold', $finder->get(FontQuery::family('Atelier Tiny')->weight(700))->descriptor()->subfamily);
+    }
+
+    public function testExplicitItalicStyleSelectsTheItalicFace(): void
+    {
+        $regular = self::namedFontPath('finder-style-regular', 'Regular');
+        $italic = self::namedFontPath('finder-style-italic', 'Italic');
+        $finder = FontFinder::fromLocator(self::locator($regular, $italic));
+
+        self::assertSame('Italic', $finder->get(FontQuery::family('Atelier Tiny')->italic())->descriptor()->subfamily);
+    }
+
+    public function testRegularWeightQueryPrefersUprightOverItalicOfTheSameWeight(): void
+    {
+        $italic = self::namedFontPath('finder-same-weight-italic', 'Italic');
+        $regular = self::namedFontPath('finder-same-weight-regular', 'Regular');
+        $finder = FontFinder::fromLocator(self::locator($italic, $regular));
+
+        self::assertSame('Regular', $finder->get('Atelier Tiny', weight: 400)->descriptor()->subfamily);
+    }
+
     public function testItCreatesDirectoryAndSystemFinders(): void
     {
         $directory = self::temporaryDirectory('finder-directory');
@@ -149,6 +204,14 @@ final class FontFinderTest extends TestCase
                 yield from $this->paths;
             }
         };
+    }
+
+    private static function namedFontPath(string $name, string $subfamily): string
+    {
+        $path = sys_get_temp_dir() . '/atelier-font-' . $name . '-' . bin2hex(random_bytes(4)) . '.ttf';
+        TinyTrueTypeFont::writeWithNames($path, 'Atelier Tiny', $subfamily);
+
+        return $path;
     }
 
     private static function tinyFontPath(string $name): string
