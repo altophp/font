@@ -20,18 +20,14 @@ A font containing the capital letter A prints `A is available`.
 ## Documentation
 
 - [Installation](installation.md): add the package with Composer and run a smoke test.
-- [Getting started](getting-started.md): check that a font covers the characters of your text.
-- [Operations](operations.md): find, read, subset, compress, and write fonts, from a file on disk to a delivered web font.
+- [Getting started](getting-started.md): read a font installed on your machine and check that it covers your text.
 - [Fonts](fonts.md): families, faces, and files, and what a loaded face exposes.
 - [Glyphs](glyphs.md): map characters to glyphs, measure them, and trace their outlines.
+- [Files](files.md): find a font by family, read a file or bytes, write TTF, WOFF, or WOFF2.
+- [Subsetting](subset.md): keep the characters your application uses and check what remains.
+- [Compression](compress.md): choose WOFF or WOFF2 and provide Brotli.
 - [Formats](formats.md): supported containers and outlines, detected by signature.
-- [Tables](tables.md): the sfnt table structure, and what the package keeps, rewrites, or rejects.
+- [Tables](tables.md): what subsetting keeps, rewrites, or refuses inside the font.
 - [Errors](errors.md): the exceptions the package raises and how to recover.
-- [Troubleshooting](troubleshooting.md): symptoms, causes, and fixes.
 
-## Boundaries
-
-ALTO Font supports TrueType outlines in the containers listed under
-[Formats](formats.md). It does not support CFF or CFF2 outlines, shape text,
-rasterize glyphs, or export a selected variable-font instance as a fixed font.
-Check the font's license before distributing converted or subsetted files.
+Next: [Installation](installation.md).

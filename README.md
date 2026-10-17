@@ -41,9 +41,9 @@ For Inter Regular, this prints `Inter Regular`. See
 composer require alto/font
 ```
 
-Requires PHP 8.4+, Iconv, and Zlib. Reading WOFF2 also needs the Brotli PHP
-extension or executable; [writing WOFF2](docs/convert/woff2.md) requires an
-explicit compressor. TTF and WOFF examples need no Brotli dependency.
+Requires PHP 8.4+ with Iconv and Zlib. WOFF2 adds Brotli: the PHP extension
+or the executable to read, and a compressor passed to the writer; see
+[Compression](docs/compress.md).
 
 ## Create a smaller font for your text
 
@@ -71,11 +71,10 @@ new WoffWriter()->write($result->font, $destination);
 printf("Saved inter-subset.woff (%d bytes)\n", filesize($destination));
 ```
 
-This creates a WOFF file containing the requested characters available in the
-source, plus required glyph dependencies. The original file is unchanged.
-Use the full text your application needs: later text may contain characters
-excluded from this subset. Read [Create a subset](docs/subset.md) for
-missing-character checks, output sizes, and options.
+This creates a WOFF file with the requested characters and the glyphs they
+depend on; the original file is unchanged. Use the complete text your
+application displays. Read [Subsetting](docs/subset.md) for the character
+set, the policies, and the measured sizes.
 
 ![Source and subset character grids for Inter, with WOFF sizes measured in the same format.](docs/assets/figures/subset-before-after.svg)
 
@@ -86,30 +85,27 @@ depends on the source font and the selected characters.
 
 | I want to... | Guide |
 | --- | --- |
-| Understand files, faces, characters, and glyphs | [Font concepts](docs/fonts.md) |
-| Read a font's family, style, or license fields | [Read metadata](docs/inspect/metadata.md) |
+| Understand families, faces, files, and glyphs | [Fonts](docs/fonts.md) |
+| Read a font's family, style, or license fields | [Metadata](docs/fonts/metadata.md) |
 | Check whether a font contains my characters | [Getting started](docs/getting-started.md) |
-| Inspect files, metadata, glyphs, and variations | [Inspect fonts](docs/inspect.md) |
-| Convert glyph names to Unicode text | [Glyph names](docs/inspect/glyph-names.md) |
-| Convert a font to TTF, WOFF, or WOFF2 | [Convert a font](docs/convert.md) |
-| Reduce a font to the text I use | [Create a subset](docs/subset.md) |
-| Find a font by family, weight, and style | [Find a font](docs/inspect/discovery.md) |
-| Inspect variable-font axes and glyph measurements | [Variable fonts](docs/inspect/variations.md) |
-| Check supported containers and outline formats | [Font formats](docs/formats.md) |
+| Load a file or bytes and read the face | [Reading files](docs/files/read.md) |
+| Convert glyph names to Unicode text | [Glyph names](docs/glyphs/names.md) |
+| Write a font as TTF, WOFF, or WOFF2 | [Writing files](docs/files/write.md) |
+| Serve a font to browsers as WOFF2 | [Compression](docs/compress.md) |
+| Reduce a font to the text I use | [Subsetting](docs/subset.md) |
+| Find a font by family, weight, and style | [Finding fonts](docs/files/find.md) |
+| Inspect variable-font axes and glyph measurements | [Variable fonts](docs/tables/variations.md) |
+| Check supported containers and outline formats | [Formats](docs/formats.md) |
 
 The [documentation index](docs/index.md) lists every main guide.
 
 ## Supported fonts
 
-ALTO Font supports TrueType outlines in TTF/OpenType, WOFF, and WOFF2 files,
-and individual faces from TTC/OTC collections. CFF/CFF2 outlines, color glyphs,
-and WOFF2 collections are unsupported. See [Formats](docs/formats.md) for
-operation-specific limits.
-
-Variable fonts can retain their axes during conversion and subsetting.
-Exporting a fixed weight from a variable font is not supported.
-ALTO Font reads and transforms font data; text shaping and rendering are
-handled by the application or browser using the output.
+ALTO Font works on TrueType outlines in TTF, OpenType, WOFF, and WOFF2 files,
+and on individual faces of TTC and OTC collections. Variable fonts keep their
+axes through conversion and subsetting. Text shaping and rendering stay with
+the application or browser that uses the output; [Formats](docs/formats.md)
+details each container.
 
 ## Contributing
 

@@ -1,14 +1,18 @@
 # Getting started
 
-Read a font's family and style, then check whether it contains the characters
-in your text. This gives you a first check before using that font in an
-application or preparing a subset.
+Read a font that is already on your machine, then check that it covers the
+text you want to display with it. A dozen lines of PHP give you the family,
+the style, the glyph count, and the list of missing characters, which is what
+you need to know before shipping a font with an application or cutting a
+subset from it.
 
-Install the package as described in [Installation](installation.md). Put a
-TrueType font at `fonts/Inter-Regular.ttf` beside your `vendor` directory, or
-change the path below to your own font.
+Install the package as described in [Installation](installation.md).
 
-Save this as `inspect.php` and run `php inspect.php`:
+## Read a font installed on your system
+
+Every desktop system ships TrueType fonts. The script below tries the usual
+locations and reads the first file that exists. Save it as `font.php` beside
+`vendor` and run `php font.php`:
 
 ```php
 <?php
@@ -17,61 +21,64 @@ require __DIR__.'/vendor/autoload.php';
 
 use Alto\Font\Font;
 
-$font = Font::fromFile(__DIR__.'/fonts/Inter-Regular.ttf');
+$candidates = [
+    '/System/Library/Fonts/Supplemental/Verdana.ttf',    // macOS
+    'C:\Windows\Fonts\verdana.ttf',                      // Windows
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',   // Debian, Ubuntu
+    '/usr/share/fonts/dejavu-sans-fonts/DejaVuSans.ttf', // Fedora
+];
+
+$path = array_find($candidates, static fn (string $candidate): bool => is_file($candidate))
+    ?? throw new RuntimeException('No known system font found. Use the path of one of your own TrueType files.');
+
+$font = Font::fromFile($path);
 $metadata = $font->metadata();
 
-printf("Family: %s\nStyle: %s\n", $metadata->family, $metadata->subfamily);
+printf("%s %s, %s, %d glyphs\n", $metadata->family, $metadata->subfamily, $metadata->format->value, $font->face()->glyphCount);
 ```
 
-For Inter Regular, the output is:
+On macOS this prints:
 
 ```text
-Family: Inter
-Style: Regular
+Verdana Regular, truetype, 913 glyphs
 ```
 
-The values come from your font; ALTO Font does not download Inter for you.
-Loading a font leaves the original file unchanged.
+The values come from the file's own tables. Loading reads the file into
+memory and never modifies it. If none of the candidates exists, replace the
+list with the path of a font you have: a `.ttf` from any foundry works, while
+an `.otf` with CFF outlines is refused, see [Formats](formats.md).
 
-![Inter Regular specimen, 518 glyphs and 2048 units per em; A is available and U+65E5 is missing from this sample.](assets/figures/font-specimen.svg)
+## Check that the font covers your text
 
-This is the bundled Inter Latin sample. Your file may contain a different
-character set or glyph count. The illustration uses the bundled Inter Latin sample.
-
-## Check whether the font contains your text
-
-Add this to the same script:
+Add this to the same script. The text is an interface string with accented
+letters, an arrow, and a check mark:
 
 ```php
 use Alto\Font\Subset\UnicodeSet;
 
-foreach (UnicodeSet::fromText('Café') as $codepoint) {
-    printf(
-        "U+%04X: %s\n",
-        $codepoint,
-        null === $font->glyphIdForCodepoint($codepoint) ? 'missing' : 'available',
-    );
+$missing = [];
+foreach (UnicodeSet::fromText('Résumé → Suivant ✓') as $codepoint) {
+    if (null === $font->glyphIdForCodepoint($codepoint)) {
+        $missing[] = sprintf('U+%04X', $codepoint);
+    }
 }
+
+echo [] === $missing ? "Every character is available.\n" : 'Missing: '.implode(', ', $missing)."\n";
 ```
 
-With the Inter Latin sample, the added block prints each distinct codepoint
-in ascending order:
+With Verdana this prints `Missing: U+2192, U+2713`: the font has the accented
+letters but neither the arrow nor the check mark. A missing codepoint has no
+entry in the font's character map. The check is per character; shaping and
+fallback happen in the application that uses the font.
 
-```text
-U+0043: available
-U+0061: available
-U+0066: available
-U+00E9: available
-```
+## Where to go next
 
-`missing` means the font has no character mapping for it. ALTO Font does not
-select a replacement font. This checks character availability, not whether a
-whole phrase will shape or render correctly.
+| You want to | Read |
+| --- | --- |
+| Read the license, version, or names | [Metadata](fonts/metadata.md) |
+| Find a font by family and weight instead of a path | [Finding fonts](files/find.md) |
+| Keep only the characters of your application | [Subsetting](subset.md) |
+| Serve the font to browsers | [Compression](compress.md) |
+| Understand family, face, and glyph | [Fonts](fonts.md) |
 
-## Continue with your font
-
-Continue with [Metadata](fonts/metadata.md) to read version, style, and license
-fields, or with [Operations](operations.md) to subset, compress, or write the
-font. If file, face, or glyph terminology is unfamiliar, read [Fonts](fonts.md).
-
-If loading fails, see [Troubleshooting](troubleshooting.md#the-font-will-not-load).
+If loading fails, [Reading files](files/read.md#when-loading-fails) lists the causes.

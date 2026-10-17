@@ -1,4 +1,4 @@
-# Read font metadata
+# Metadata
 
 Read the family, style, version, and license fields stored in a font. These
 values can populate an asset list or help you identify a file before conversion.
@@ -31,38 +31,9 @@ Other optional fields include full and PostScript names, copyright,
 manufacturer, designer, designer URL, vendor URL, and description.
 `$metadata->format` identifies the loaded file container.
 
-## Read weight and style for matching
-
-Continue the script with:
-
-```php
-$descriptor = $font->descriptor();
-
-printf(
-    "Weight: %s, style: %s, stretch: %s\n",
-    $descriptor->weight->css(),
-    $descriptor->style->value,
-    $descriptor->stretch->css(),
-);
-```
-
-For a regular face, values typically describe weight 400, normal style, and
-100% stretch. They are inferred from subfamily names and are used by
-[font discovery](../operations/find.md); they do not implement the full CSS matching rules.
-
-## Read dimensions and glyph counts
-
-`$font->face()` exposes `unitsPerEm`, `ascender`, `descender`, and `glyphCount`.
-Dimensions use font design units. To convert a value to a target size of 16
-pixels, multiply it by `16 / $font->face()->unitsPerEm`.
-
-For collections, `faceIndex` identifies the selected face and `faceCount`
-reports the number of faces. `tables` lists OpenType table tags; it does not
-expose raw table bytes. See [Glyphs](../glyphs.md) for individual measurements.
-
-## Names and languages
-
-Name selection keeps the first decodable record for each field rather than
-selecting by language. Non-ASCII legacy Mac Roman names may not be transcoded
-correctly. Applications needing localized names should treat these fields as
-best available values.
+How the family and subfamily are chosen among the name records, and how the
+weight, style, and stretch of `descriptor()` derive from them, is explained in
+[Families](families.md). Dimensions are read through [Metrics](metrics.md),
+structural facts such as the face index and the table tags through
+[Reading](../files/read.md), and glyph counts through
+[Glyph counts](../glyphs/counts.md).

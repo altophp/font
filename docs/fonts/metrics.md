@@ -1,8 +1,9 @@
-# Font-wide metrics and bytes loading
+# Metrics
 
-Use `Font::metrics()` when building an embedding adapter or inspecting a
-font's declared dimensions. Use `glyphMetrics()` for one glyph's advance and
-side bearing. Both APIs return unscaled font units.
+Use `Font::metrics()` to read a font's declared dimensions: units per em,
+line metrics, bounds, and embedding flags. Use
+[`glyphMetrics()`](../glyphs/metrics.md) for one glyph's advance and side
+bearing. Both return unscaled font design units.
 
 ```php
 use Alto\Font\Font;
@@ -39,14 +40,11 @@ font (`false`), and zero embedding flags remain distinguishable from missing
 data. OS/2 versions 0 and 1 do not supply cap/x heights, even if trailing bytes
 are present. Truncated fields throw `InvalidFontException` when read.
 
-Embedding flags are font data, not a PDF descriptor flag value or a licensing
-decision. Consumers interpret them for their workflow. This API does not
-estimate missing heights, infer serif/symbolic flags, or invent stem widths.
-
-Bounds are the font's declared control-point bounds, not recomputed tight ink
-bounds. Reading metrics examines only fixed table prefixes (at most 176 bytes)
-and never decodes glyph outlines. It does not verify the accuracy of declarations
-in malformed fonts. After subsetting, inspect the resulting font's metrics.
+Every value is the font's own declaration, read from fixed table prefixes of
+at most 176 bytes: bounds are the declared control-point bounds, heights come
+from `OS/2` when it provides them, and embedding flags are the raw `fsType`
+bits for your workflow to interpret. After subsetting, read the metrics of
+the resulting font.
 
 The metrics describe the default font instance. `metrics()` on a view
 selected with `withVariations()` throws `UnsupportedFontException`: instance
@@ -57,4 +55,4 @@ Field definitions: OpenType [head](https://learn.microsoft.com/en-us/typography/
 [OS/2](https://learn.microsoft.com/en-us/typography/opentype/spec/os2), and
 [post](https://learn.microsoft.com/en-us/typography/opentype/spec/post).
 
-To load the font from bytes instead of a file, see [Read](../operations/read.md#load-from-memory).
+To load the font from bytes instead of a file, see [Read](../files/read.md#load-from-memory).

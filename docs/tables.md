@@ -1,89 +1,51 @@
-# OpenType subsetting support
+# Tables
 
-This reference describes the table-level limits of subsetting. Start with
-[Create a subset](../subset.md) for a working example, or
-[Choose subset options](operations/subset/policies.md) for application decisions.
+Read this section when a subset is refused, when the output lacks something
+the source had, or when you want to know what `HintingPolicy` and
+`LayoutPolicy` remove. Inside a TrueType, OpenType, WOFF, or WOFF2 file the
+data is split into tables, each named by a four-letter tag: `cmap` maps
+characters to glyphs, `glyf` holds the outlines, `GPOS` positions them, `fvar`
+declares variation axes. Reading leaves every table untouched. Subsetting
+rewrites some, keeps others as they are, and refuses a few; which is which
+decides whether compact numbering works on your font and what the output
+loses.
 
-## Compact glyph IDs
+- [Hinting](tables/hinting.md): what the instruction tables do at small sizes, and what `HintingPolicy::Drop` removes.
+- [Layout](tables/layout.md): the tables behind ligatures, kerning, and marks, and what each `LayoutPolicy` keeps.
+- [Variable fonts](tables/variations.md): what makes one file a whole family, and how to pick a weight.
 
-Compact mode renumbers retained glyphs and removes PostScript glyph names by
-writing `post` format 3 when required. It rewrites supported `cmap`, horizontal
-and vertical metrics, compound, GSUB, GPOS, GDEF, legacy `kern` format 0,
-`gvar`, HVAR, and VVAR mapping structures. Any glyph-indexed table that cannot
-be rewritten causes an explicit rejection.
+## What every font contains
 
-GSUB compaction handles lookup types 1 through 8, including extension lookups.
-GPOS compaction handles lookup types 1 through 9, with type 9 used for extension
-lookups. Support for every lookup type does not imply support for every valid
-font: the restrictions below still apply. OpenType Layout 1.1 feature
-variations are preserved. GPOS positioning records retain valid Device and
-VariationIndex data while their offsets are relocated. Non-NULL feature
-parameters are supported for `size`, `ss01` through `ss20`, and `cv01` through
-`cv99`; unknown parameter formats are rejected explicitly.
+Every font the package loads has the eight tables the specification requires:
+`cmap`, `head`, `hhea`, `hmtx`, `maxp`, `name`, `OS/2`, and `post`. They
+provide the character map, the dimensions, the horizontal metrics, the names,
+and the glyph names.
 
-Oversized PairPos format 1 data is split across lookup subtables, including
-within an existing PairSet at glyph-pair record boundaries. Both value records
-and their Device or VariationIndex adjustments are retained. PairPos
-format 2 removes unused classes and splits class rows when its internal
-16-bit offsets would overflow. A row that still cannot fit is expanded into
-format 1 glyph-pair records, split across subtables as needed. Implicit class
-0 and Device or VariationIndex adjustments are preserved. A single pair record
-with its adjustment data, or other layout structures, can still exceed their
-offset limits and be rejected.
+Outlines must be TrueType: `glyf`, indexed by `loca`. `CFF ` and `CFF2` are
+rejected on load, and `SVG `, `COLR`, `CPAL`, `sbix`, `CBDT`, `CBLC`, `EBDT`,
+and `EBLC` glyph data is not rendered; see [Formats](formats.md).
 
-GDEF ligature caret values support formats 1, 2 and 3. Format 3 retains Device
-or VariationIndex adjustments while relocating their offsets. The shared
-variation store is rebuilt from its referenced structures, so it need not be
-the final top-level subtable in the source GDEF table.
+## What subsetting keeps, rewrites, or refuses
 
-## Hinting tables
+Writing an unchanged standalone font preserves every table byte for byte.
+Subsetting with the default `GlyphIdPolicy::Preserve` keeps glyph slots in
+place and rewrites only what the selection requires. `Compact` renumbers the
+retained glyphs, so every table that stores glyph identifiers is rewritten,
+dropped, or refused:
 
-Dropping hinting removes glyph instructions and the related `cvar`, `cvt `, `fpgm`,
-`prep`, `hdmx`, `LTSH`, and `VDMX` tables when `HintingPolicy::Drop` is selected.
+- `cmap`, `hmtx`, `hhea`, `maxp`, `OS/2`, and `post` are rewritten for the selection in both modes. Compact mode switches `post` to format 3 when glyph names must go.
+- `glyf` and `loca` keep unselected glyphs as empty slots in preserve mode. Compact mode renumbers them and remaps compound references.
+- `cvt `, `fpgm`, `prep`, `gasp`, `hdmx`, `LTSH`, `VDMX`, and `cvar` are kept with `HintingPolicy::Keep` and dropped with `Drop`, in both modes. See [Hinting](tables/hinting.md).
+- `GSUB`, `GPOS`, and `GDEF` are kept, reduced, or dropped by `LayoutPolicy`. Compact mode also remaps them. See [Layout](tables/layout.md).
+- `kern` format 0 is kept. Compact mode remaps it independently of `LayoutPolicy`.
+- `fvar`, `avar`, `gvar`, `HVAR`, `vhea`, `vmtx`, and `VVAR` are kept. Compact mode remaps them. See [Variable fonts](tables/variations.md).
+- `DSIG` is removed whenever any data is rebuilt.
+- `meta` is kept in preserve mode and removed in compact mode, because its glyph references cannot be remapped safely.
+- `VARC`, `BASE`, `MATH`, color, bitmap, and unsupported `kern` formats are kept as opaque bytes in preserve mode and refused with `UnsupportedFontException` in compact mode.
 
-## Layout tables
-
-`LayoutPolicy::SubstitutionsOnly` keeps supported GSUB substitutions and their
-required GDEF data while removing GPOS positioning. `LayoutPolicy::Drop`
-removes GSUB, GPOS, and GDEF entirely.
-
-This policy controls OpenType Layout tables. A legacy `kern` table is preserved
-and remapped independently when its subtables use supported format 0.
-
-## Variable fonts and unsupported structures
-
-Supported variable TrueType subsets preserve all axes. Compact mode remaps
-per-glyph `gvar` blocks and HVAR mappings while preserving supported axis data.
-When `vhea` and `vmtx` are present, their glyph metrics are remapped together;
-VVAR mappings are also remapped when present. The HVAR and VVAR
-`ItemVariationStore` delta sets and their indexes are preserved. Their physical
-layout is rebuilt without unrelated bytes or padding; unused delta sets are
-not removed. This is not static instancing or axis-range reduction.
-
-HVAR and VVAR mappings can precede or follow the variation store, including
-gaps between its referenced structures. Shared mapping and variation-data
-references are supported; overlapping structures are rejected. The store
-copier preserves both ordinary and long-word delta encodings. This does not
-extend support to other tables such as COLR that use long-word deltas.
-
-A view created with `withVariations()` cannot be subsetted. Return to the
-variable source with `withoutVariations()` first.
-
-Compact mode still rejects `VARC`, `BASE`, color, bitmap, mathematical tables,
-unsupported legacy kerning, and other glyph-indexed structures it cannot
-remap. Private `meta` data is removed because its glyph references cannot be
-remapped safely. Supporting `vhea`, `vmtx`, and VVAR does not imply general
-vertical-layout support while those companion tables remain unsupported.
-
-Always inspect `SubsetResult::$warnings` and validate the final output in the
-environment that will shape and render it.
-
-Preserving outlines and positioning does not guarantee identical rasterized
-pixels. In the Recursive/CoreText validation sample, removing `post` glyph
-names changes small-size rendering even when all other font data is retained.
-Removing glyphs used by that renderer can also affect retained glyphs.
-
-The [Recursive rendering diagnosis](https://github.com/altophp/font/blob/main/tests/Validation/RECURSIVE_RENDERING.md)
-contains the reproducible CoreText evidence and the limits of its workaround.
-
-See [Variable fonts](tables/variations.md) for axes, instances, and selected views.
+A refusal happens in `subset()`, before anything is written. Keep `Preserve`
+for that font, or remove the data with `HintingPolicy` or `LayoutPolicy` when
+it belongs to those groups. Remapping `vhea`, `vmtx`, and `VVAR` does not make
+vertical layout supported while the other vertical tables are not. Read
+`SubsetResult::$warnings` after every subset, and validate the output where
+it will be shaped and rendered.

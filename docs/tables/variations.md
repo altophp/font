@@ -1,12 +1,11 @@
-# Inspect a variable font
+# Variable fonts
 
-A variable font can contain a range of weights or widths in one file. ALTO
-Font lets you list those axes and read glyph measurements or outlines at
-chosen coordinates.
-
-These selections are read-only views. They cannot be exported or subsetted as
-fixed-weight fonts. To convert or subset with all axes preserved, use the
-original variable font.
+Use a variable font when one file should provide several weights or widths:
+it stores a default face plus deltas along designer-defined axes, and any
+position on those axes is a valid instance. The package lists the axes, reads
+measurements and outlines at a chosen position, and keeps the axes intact
+when writing or subsetting: a position is read through a view, and files are
+written from the source with all its axes.
 
 ## List the available axes
 
@@ -42,6 +41,16 @@ For a weight axis, a line might be `wght: 100 to 900, default 400`. The actual
 ranges depend on the file. Axes also expose their optional name and hidden
 flag; named presets are available through `$variations->instances`.
 
+## What the file contains
+
+A static font stores one face per file. A variable font adds deltas that move
+outline points and adjust metrics: `fvar` declares the axes and the named
+instances such as Bold or Light, `avar` remaps axis values, `gvar` holds the
+outline deltas for `glyf` fonts, `HVAR`, `MVAR`, and `VVAR` hold the metric
+deltas, and `STAT` describes the design space. Without them, the remaining
+tables form a complete static font: the default instance. The package reads
+TrueType-flavored variable fonts: `glyf` with `gvar`, `avar`, and `HVAR`.
+
 ## Compare a glyph at another weight
 
 Continue the script with a font that has a `wght` axis and contains `A`:
@@ -76,33 +85,25 @@ The illustration uses the bundled variable-font fixture.
 ## Return to the source for conversion or subsetting
 
 `$bold->withoutVariations()` returns the original variable source with all its
-axes. It does not freeze weight 700. A weighted [finder query](../operations/find.md)
+axes. It does not freeze weight 700. A weighted [finder query](../files/find.md)
 can also return a selected view, with the same writing restrictions.
 
-## Coordinate API
+## Select coordinates
 
-Pass an array to `withVariations()` as above, or build a
-`VariationCoordinates` object with `defaults($variations)` and `with()`.
-`variationCoordinates()` reports the selected coordinates.
+- `variations(): ?FontVariations` returns the axes (tag, minimum, default, maximum, flags, optional name) and the named instances, or `null` for a static face.
+- `withVariations(array|VariationCoordinates $coordinates): Font` returns a new view at the requested position. Array keys are axis tags; values are integers or floats. Unspecified axes use their defaults, out-of-range values are clamped, and an unknown axis or a static font raises `InvalidFontException`.
+- `variationCoordinates(): ?VariationCoordinates` returns the resolved coordinates of a view, or `null` for the source.
+- `withoutVariations(): Font` returns the source with all its axes; on the source itself it returns the same object.
 
-Measurements and outlines use supported TrueType variation data (`avar`,
-`gvar`, and `HVAR`). Text shaping and rendering at those coordinates are the
-responsibility of the application using the font.
+A `VariationCoordinates` object can also be built with `defaults($variations)`
+and `with()`. A view affects glyph measurements and outlines; it is not a
+static font, and writing or subsetting it raises `UnsupportedFontException`.
+Text shaping and rendering at those coordinates belong to the application.
 
-## Contracts
+## Subset a variable font
 
-| Signature | Contract |
-| --- | --- |
-| `variations(): ?FontVariations` | Return axes and named instances, or `null` for a static face. |
-| `withVariations(array\|VariationCoordinates $coordinates): Font` | Return a new view at the requested axis coordinates. Array keys are axis tags; values are integers or floats. Unspecified axes use their defaults. Out-of-range values are clamped. |
-| `variationCoordinates(): ?VariationCoordinates` | Return resolved selected coordinates, or `null` when no view was selected. |
-| `withoutVariations(): Font` | Return the unselected variable source. If no view is selected, return the same object. |
-
-Selecting coordinates on a static font or supplying an unknown axis raises
-`InvalidFontException`. `FontVariations::$axes` contains the axis tag, minimum,
-default, maximum, flags, and optional name. `instances` contains named presets.
-
-Selected views affect supported glyph measurements and outlines. They do not
-create a static font. Writing or subsetting such a view throws
-`UnsupportedFontException`; use `withoutVariations()` to work with the original
-variable font and all of its axes.
+A subset keeps every axis of its source: compact mode remaps the per-glyph
+`gvar` data and the `HVAR` and `VVAR` mappings together with the glyphs, and
+rebuilds the variation stores without unrelated bytes. To subset a view
+created with `withVariations()`, return to the source with
+`withoutVariations()` first. See [Policies](../subset/policies.md#subset-a-variable-font).

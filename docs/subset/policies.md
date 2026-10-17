@@ -1,15 +1,13 @@
-# Subset options
+# Policies
 
-Start with the defaults in [Create a subset](../subset.md). Change one
+Start with the defaults in [Subsetting](../subset.md). Change one
 option at a time and compare the output in the application that uses it.
 
-| Option | Default | When to change it |
-| --- | --- | --- |
-| Glyph numbering | `GlyphIdPolicy::Preserve` | Try `Compact` when you need smaller output and the font supports it |
-| Hinting | `HintingPolicy::Keep` | Try `Drop` if smaller output matters more than preserving small-size rendering |
-| Text layout | `LayoutPolicy::Preserve` | Remove data only for controlled content that does not need it |
+- Glyph numbering defaults to `GlyphIdPolicy::Preserve`. Try `Compact` when you need smaller output and the font supports it.
+- Hinting defaults to `HintingPolicy::Keep`. Try `Drop` if smaller output matters more than preserving small-size rendering.
+- Text layout defaults to `LayoutPolicy::Preserve`. Remove data only for controlled content that does not need it.
 
-![Three WOFF subsets of the same Inter text: default retains 518 slots, compact reduces them to 104, and dropping hinting changes the size again.](../../assets/figures/subset-options.svg)
+![Three WOFF subsets of the same Inter text: default retains 518 slots, compact reduces them to 104, and dropping hinting changes the size again.](../assets/figures/subset-options.svg)
 
 All three examples retain 104 glyphs and preserve layout. Default output is
 19,784 bytes with 518 slots; compact output is 8,308 bytes with 104 slots.
@@ -49,12 +47,15 @@ printf("Saved inter-compact.woff (%d bytes)\n", filesize($destination));
 Compact mode closes gaps in glyph numbering and rewrites the related data.
 Compare its file size with a default subset written in the same format.
 It can reject fonts containing structures that cannot be safely rewritten;
-see the [support reference](../../tables.md).
+see the [support reference](../tables.md).
 
 Keep the default if another part of your application stores original glyph
-identifiers. Compact mode also removes glyph names. Even with matching
-outlines and positioning, rendering can change on some platforms; compare
-small text as well as large text before shipping.
+identifiers. Compact mode also removes glyph names, and one renderer is known
+to depend on them: CoreText renders Recursive differently without its glyph
+names and extra glyphs, as the
+[technical diagnosis](https://github.com/altophp/font/blob/main/tests/Validation/RECURSIVE_RENDERING.md)
+records. Matching outlines and positioning do not guarantee matching pixels
+on every renderer; compare small text as well as large text before shipping.
 
 ## Remove hinting
 
@@ -69,14 +70,16 @@ $result = $font->subset(new SubsetOptions(
 ));
 ```
 
-Hinting helps render glyphs at small sizes. Removing it can reduce the file,
-but may change sharpness or spacing on the target renderer. Keep it unless
-you have checked the sizes and devices your application uses.
+Removing hinting can reduce the file but may change sharpness or spacing on
+the target renderer. Keep it unless you have checked the sizes and devices
+your application uses. [Hinting](../tables/hinting.md) explains what the
+instructions do and which tables `Drop` removes.
 
 ## Remove text layout data
 
-Keep `LayoutPolicy::Preserve` for ordinary text. Layout data controls behavior
-such as ligatures, joining, and mark placement.
+Keep `LayoutPolicy::Preserve` for ordinary text. Layout data controls
+ligatures, joining, kerning, and mark placement; [Layout](../tables/layout.md)
+explains the tables involved.
 
 `LayoutPolicy::SubstitutionsOnly` keeps supported substitutions but removes
 OpenType positioning. `LayoutPolicy::Drop` removes both. These options can
@@ -94,21 +97,8 @@ query, call `withoutVariations()` before subsetting. This returns to the full
 variable source; it does not keep only the selected weight.
 
 Always review `SubsetResult::$warnings`. For precise table and offset limits,
-see [OpenType subsetting support](../../tables.md).
+see [Tables](../tables.md) and [Variable fonts](../tables/variations.md).
 
-## Check output size and rendering
-
-Required compound glyphs and substitution dependencies may remain even when
-they were not requested. Preserve mode also keeps original glyph slots. Compare
-actual files in the same format before changing policies: `sfntSize` measures
-uncompressed font data, while `filesize()` measures the written container.
-`font->face()->glyphCount` includes empty preserved slots; `retainedGlyphCount`
-counts retained glyphs.
-
-For a visible difference, start with default options, retain hinting and layout,
-and compare your application's text at its actual display sizes. Include all
-required accents and characters. Matching outlines and positioning do not
-guarantee matching pixels on every renderer. Recursive has a documented CoreText
-dependency on glyph names and additional glyphs; its
-[technical diagnosis](https://github.com/altophp/font/blob/main/tests/Validation/RECURSIVE_RENDERING.md) and narrow
-workaround do not establish rendering fidelity for other fonts.
+To compare output sizes before shipping, see [Sizes](../compress/sizes.md);
+[Glyph counts](../glyphs/counts.md) explains why a subset keeps more glyphs
+than characters.

@@ -1,4 +1,4 @@
-# Convert glyph names to text
+# Glyph names
 
 Use `GlyphName::toUnicode()` when a glyph name is available but a Unicode
 character mapping is not. It returns a UTF-8 string without loading a font.
@@ -48,11 +48,9 @@ Adobe mapping and the same Unicode-name rules.
 
 ## Scope and cost
 
-This API interprets names provided by the caller. It does not read names from
-a font's `post` table, resolve a glyph ID, check character coverage, or shape
-text. Use [`Font::glyphIdForCodepoint()`](../glyphs.md) to look up a character in
-a loaded font. PDF encoding dictionaries and `/ToUnicode` maps belong to the
-PDF reader.
+This API interprets names you provide. To look up a character in a loaded
+font, use [`Font::glyphIdForCodepoint()`](../glyphs.md); PDF encoding
+dictionaries and `/ToUnicode` maps belong to the PDF reader.
 
 The two bundled mappings load once, on demand. Caller-provided names are
 never cached. Processing is iterative and linear in the name length, with
