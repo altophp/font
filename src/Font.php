@@ -14,6 +14,8 @@ declare(strict_types=1);
 namespace Alto\Font;
 
 use Alto\Font\Descriptor\FontDescriptor;
+use Alto\Font\Exception\ExceptionDetacher;
+use Alto\Font\Exception\FontExceptionInterface;
 use Alto\Font\Exception\GlyphNotFoundException;
 use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\Exception\InvalidTextException;
@@ -58,7 +60,14 @@ final readonly class Font
      */
     public static function fromBytes(string $data, int $faceIndex = 0): self
     {
-        return new self(SfntFont::parse($data, '<memory>', $faceIndex));
+        try {
+            return new self(SfntFont::parse($data, '<memory>', $faceIndex));
+        } catch (FontExceptionInterface $exception) {
+            // Release the bytes from this frame before the fresh trace is captured.
+            $data = '';
+
+            throw ExceptionDetacher::detach($exception::class, $exception->getMessage(), $exception->getCode());
+        }
     }
 
     /**

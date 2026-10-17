@@ -16,6 +16,7 @@ namespace Alto\Font;
 use Alto\Font\Descriptor\FontStretch;
 use Alto\Font\Descriptor\FontStyle;
 use Alto\Font\Descriptor\FontWeight;
+use Alto\Font\Exception\ExceptionDetacher;
 use Alto\Font\Exception\FontExceptionInterface;
 use Alto\Font\Exception\FontNotFoundException;
 use Alto\Font\Loader\FontLoader;
@@ -213,7 +214,7 @@ final class FontFinder
         try {
             $font = $this->loader->load($path);
         } catch (FontExceptionInterface $exception) {
-            $this->diagnostics[$path] = self::detach($exception::class, $exception->getMessage(), $exception->getCode());
+            $this->diagnostics[$path] = ExceptionDetacher::detach($exception::class, $exception->getMessage(), $exception->getCode());
 
             return null;
         }
@@ -221,18 +222,6 @@ final class FontFinder
         $this->descriptions[$path] = [$font->metadata(), $font->variations()];
 
         return $font;
-    }
-
-    /**
-     * Rebuilds an exception from scalars only: the original trace holds the whole
-     * file contents of the rejected candidate in its call arguments, and passing
-     * the exception itself here would keep it alive through this frame.
-     *
-     * @param class-string<FontExceptionInterface> $class
-     */
-    private static function detach(string $class, string $message, int $code): FontExceptionInterface
-    {
-        return new $class($message, $code);
     }
 
     private function loadFont(string $path): Font

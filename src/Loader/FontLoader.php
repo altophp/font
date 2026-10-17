@@ -13,11 +13,16 @@ declare(strict_types=1);
 
 namespace Alto\Font\Loader;
 
+use Alto\Font\Exception\ExceptionDetacher;
+use Alto\Font\Exception\FontExceptionInterface;
 use Alto\Font\Font;
 use Alto\Font\OpenType\SfntFont;
 
 /**
  * Loads font files into the public font API.
+ *
+ * A failure is rethrown as a fresh exception of the same class, message and
+ * code, so the file contents never travel in a trace argument.
  *
  * @author Simon André <smn.andre@gmail.com>
  */
@@ -25,6 +30,10 @@ final readonly class FontLoader implements FontLoaderInterface
 {
     public function load(string|\Stringable $file, int $faceIndex = 0): Font
     {
-        return new Font(SfntFont::open((string) $file, $faceIndex));
+        try {
+            return new Font(SfntFont::open((string) $file, $faceIndex));
+        } catch (FontExceptionInterface $exception) {
+            throw ExceptionDetacher::detach($exception::class, $exception->getMessage(), $exception->getCode());
+        }
     }
 }

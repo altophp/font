@@ -16,6 +16,10 @@ try {
 }
 ```
 
+The library rebuilds its own exceptions at the loading boundary so that no
+trace argument carries the font bytes, and production `php.ini` sets
+`zend.exception_ignore_args=On`, which drops call arguments from every trace.
+
 ## Font and environment failures
 
 These exceptions extend `RuntimeException`. They report a property of the
