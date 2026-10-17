@@ -17,9 +17,12 @@ use Alto\Font\Descriptor\FontStretch;
 use Alto\Font\Descriptor\FontStyle;
 use Alto\Font\Exception\FontNotFoundException;
 use Alto\Font\Exception\InvalidFontException;
+use Alto\Font\Exception\UnsupportedFontException;
 use Alto\Font\Font;
 use Alto\Font\FontFinder;
 use Alto\Font\FontQuery;
+use Alto\Font\Loader\FontLoader;
+use Alto\Font\Loader\FontLoaderInterface;
 use Alto\Font\Locator\FontLocatorInterface;
 use Alto\Font\Tests\Fixtures\TinyTrueTypeFont;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -182,6 +185,73 @@ final class FontFinderTest extends TestCase
         self::assertSame('Regular', $finder->get('Atelier Tiny', weight: 400)->descriptor()->subfamily);
     }
 
+    public function testItParsesEachCandidateOnceAcrossQueries(): void
+    {
+        $loader = self::countingLoader();
+        $finder = new FontFinder(self::locator(
+            self::namedFontPath('finder-once-regular', 'Regular'),
+            self::namedFontPath('finder-once-bold', 'Bold'),
+            self::namedFontPath('finder-once-italic', 'Italic'),
+        ), $loader);
+
+        $regular = $finder->get('Atelier Tiny');
+        self::assertSame(3, $loader->loads);
+
+        $finder->get('Atelier Tiny', weight: 700);
+        self::assertSame(4, $loader->loads, 'A new query loads only the face it returns.');
+
+        self::assertSame($regular, $finder->get('Atelier Tiny'));
+        self::assertSame(4, $loader->loads, 'A repeated query is served from the cache.');
+    }
+
+    public function testItEvictsParsedFontsBeyondTheCacheSize(): void
+    {
+        $paths = [];
+
+        for ($index = 0; $index < 10; ++$index) {
+            $paths[] = $path = sys_get_temp_dir() . '/atelier-font-finder-evict-' . $index . '-' . bin2hex(random_bytes(4)) . '.ttf';
+            TinyTrueTypeFont::writeWithNames($path, 'Family ' . $index, 'Regular');
+        }
+
+        $loader = self::countingLoader();
+        $finder = new FontFinder(self::locator(...$paths), $loader);
+
+        $finder->get('Family 0');
+        self::assertSame(10, $loader->loads, 'The first query parses every candidate once.');
+
+        for ($index = 1; $index < 10; ++$index) {
+            $finder->get('Family ' . $index);
+        }
+
+        self::assertSame(19, $loader->loads, 'Later queries load only the returned face.');
+
+        $finder->get('Family 9');
+        self::assertSame(19, $loader->loads, 'A recently returned face stays cached.');
+
+        $finder->get('Family 0');
+        self::assertSame(20, $loader->loads, 'A face evicted from the cache is parsed again.');
+    }
+
+    public function testDiagnosticsDoNotRetainTheRejectedFileContents(): void
+    {
+        $path = sys_get_temp_dir() . '/atelier-font-finder-cff-' . bin2hex(random_bytes(4)) . '.ttf';
+        TinyTrueTypeFont::write($path, unsupportedCff: true);
+        $finder = FontFinder::fromLocator(self::locator($path));
+
+        self::assertFalse($finder->has('Atelier Tiny'));
+
+        $exception = $finder->diagnostics()[$path];
+        self::assertInstanceOf(UnsupportedFontException::class, $exception);
+        self::assertStringContainsString('CFF', $exception->getMessage());
+
+        foreach ($exception->getTrace() as $frame) {
+            foreach ($frame['args'] ?? [] as $argument) {
+                self::assertFalse($argument instanceof \Throwable, 'The trace must not keep the original exception alive.');
+                self::assertTrue(!\is_string($argument) || \strlen($argument) < 1024, 'The trace must not carry font bytes.');
+            }
+        }
+    }
+
     public function testItCreatesDirectoryAndSystemFinders(): void
     {
         $directory = self::temporaryDirectory('finder-directory');
@@ -202,6 +272,29 @@ final class FontFinderTest extends TestCase
             public function fonts(): iterable
             {
                 yield from $this->paths;
+            }
+        };
+    }
+
+    /**
+     * @return FontLoaderInterface&object{loads: int}
+     */
+    private static function countingLoader(): FontLoaderInterface
+    {
+        return new class implements FontLoaderInterface {
+            public int $loads = 0;
+            private readonly FontLoader $loader;
+
+            public function __construct()
+            {
+                $this->loader = new FontLoader();
+            }
+
+            public function load(string|\Stringable $file, int $faceIndex = 0): Font
+            {
+                ++$this->loads;
+
+                return $this->loader->load($file, $faceIndex);
             }
         };
     }
