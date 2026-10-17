@@ -1,4 +1,4 @@
-# Find a font
+# Finding fonts
 
 Search a directory when you know the family and style you want but not its
 filename. `FontFinder` returns the closest matching face within that family.
@@ -26,7 +26,8 @@ if (null === $font) {
 
 With Inter Regular present, this prints `Found Inter Regular`. Otherwise the
 script reports that the family is absent. The family name comes from the
-font's metadata, not its filename.
+font's metadata, not its filename, and is compared case-insensitively; see
+[Families](../fonts/families.md).
 
 Directories are searched recursively. Pass several paths to
 `fromDirectories()` to search multiple application directories.
@@ -49,10 +50,10 @@ The result is the closest match, so check its descriptor if you require an
 exact style. The finder prefers exact static faces. A variable font can satisfy
 weight or width requests through its axes.
 
-**A variable result with selected coordinates cannot be written or subsetted.**
+A variable result with selected coordinates cannot be written or subsetted.
 Use `withoutVariations()` to work with its original variable source; that
 retains all axes rather than exporting only the requested weight. See
-[Variable fonts](variations.md).
+[Variable fonts](../tables/variations.md).
 
 For more query options, use `stretch(new FontStretch(100))`, or pass weight and
 style directly to `get()` or `find()` with `FontStyle` values.
@@ -76,16 +77,39 @@ foreach ($finder->diagnostics() as $path => $exception) {
 
 ## Search system fonts
 
+`FontFinder::system()` searches the standard font directories of the current
+operating system. A family name alone returns its regular face; add a weight
+or a style to the query for another one.
+
 ```php
 use Alto\Font\FontFinder;
 
-$font = FontFinder::system()->find('Helvetica');
+$font = FontFinder::system()->find('Verdana');
 
-echo null === $font ? "Helvetica is unavailable.\n" : "Helvetica is available.\n";
+echo null === $font ? "Verdana is unavailable.\n" : "Found {$font->face()->path}\n";
 ```
 
-Results depend on the machine. Use a controlled font directory for portable
-tests and repeatable builds.
+The first query parses every candidate file once and keeps only its names and
+axes; later queries on the same finder answer from that cache. On a Mac with
+1,249 font files in the four directories, the first query took about 5
+seconds, with a memory peak set by the largest file parsed (200 MB with the
+Apple Color Emoji collection). Use it in a one-off script or a console
+command, not in a web request, and prefer a directory you control for builds
+and tests.
+
+### Scanned directories
+
+`FontLocator::standardSystemDirectories()` returns the directories below that
+exist on the current machine. Each is scanned recursively for `.ttf`, `.otf`,
+`.woff`, `.woff2`, `.ttc`, and `.otc` files.
+
+- macOS: `/System/Library/Fonts`, `/System/Library/Fonts/Supplemental`, `/Library/Fonts`, `~/Library/Fonts`, and `/Network/Library/Fonts`.
+- Linux: `/usr/share/fonts`, `/usr/local/share/fonts`, `~/.local/share/fonts`, and `~/.fonts`.
+- Windows: `%WINDIR%\Fonts` and `%LOCALAPPDATA%\Microsoft\Windows\Fonts`.
+
+The package does not know which fonts a system ships, only where to look.
+Fonts bundled with an application belong in its own directory, passed to
+`FontFinder::fromDirectories()`, so that builds do not depend on the machine.
 
 ## Provide paths from another source
 

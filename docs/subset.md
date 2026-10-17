@@ -1,14 +1,23 @@
-# Create a font subset
+# Subsetting
 
-Keep the characters your application uses and write a new font file. This is
-useful for fixed labels or a known translation corpus. For changing content,
-include every required character or provide a fallback in your application.
+Subset a font when your application displays a known set of characters: the
+strings of a user interface, the labels of a chart, a translated catalog. The
+result is a new font that maps only those characters, which is smaller to
+serve and faster to load. The source file stays unchanged.
 
-## From text to a WOFF file
+For text you control, the subset is complete by construction. For text typed
+by users, such as a comment or a product name, include every character the
+content can contain, or serve the complete font for that text: a character
+absent from the subset renders as the missing-glyph box or falls back to
+another font.
 
-Install the package, place your font at `fonts/Inter-Regular.ttf`, and create
-an `output` directory. Save this script beside `vendor` and run it with PHP.
-The destination must not already exist.
+## Subset a font for a translated interface
+
+The characters come from two places: the printable ASCII range, so that
+numbers, punctuation, and English fallbacks always work, and the translated
+strings of your application, which add the accented letters and symbols your
+languages need. Place a font at `fonts/Inter-Regular.ttf` beside `vendor`,
+create an `output` directory, and run:
 
 ```php
 <?php
@@ -16,125 +25,104 @@ The destination must not already exist.
 require __DIR__.'/vendor/autoload.php';
 
 use Alto\Font\Font;
+use Alto\Font\Subset\GlyphIdPolicy;
 use Alto\Font\Subset\SubsetOptions;
 use Alto\Font\Subset\UnicodeSet;
 use Alto\Font\Writer\WoffWriter;
 
-$font = Font::fromFile(__DIR__.'/fonts/Inter-Regular.ttf');
-$characters = UnicodeSet::fromText('ALTO Font 0123456789');
-$result = $font->subset(new SubsetOptions($characters));
+$translations = [
+    'Ajouter au panier',
+    'Commander',
+    'Votre commande est confirmée.',
+    'Livraison offerte dès 50 €',
+];
 
-$destination = __DIR__.'/output/inter-subset.woff';
+$characters = UnicodeSet::fromCss('U+0020-007E')
+    ->union(UnicodeSet::fromText(implode(' ', $translations)));
+
+$font = Font::fromFile(__DIR__.'/fonts/Inter-Regular.ttf');
+$result = $font->subset(new SubsetOptions(
+    $characters,
+    glyphIds: GlyphIdPolicy::Compact,
+));
+
+$destination = __DIR__.'/output/inter-ui.woff';
 new WoffWriter()->write($result->font, $destination);
 
-printf("Saved inter-subset.woff (%d bytes)\n", filesize($destination));
-printf("%d of %d requested characters found\n", $result->mappedCodepointCount, count($characters));
+printf("%d of %d characters mapped, %d glyphs kept\n", $result->mappedCodepointCount, count($characters), $result->retainedGlyphCount);
+printf("Saved %s (%d bytes)\n", basename($destination), filesize($destination));
 ```
 
-The result is a loadable WOFF file at `output/inter-subset.woff`. The script
-prints its actual size and how many requested codepoints the source contains.
-The original font stays unchanged. For WOFF2 output, use the
-[WOFF2 writer with a Brotli compressor](convert/woff2.md).
+In an application, `$translations` comes from the translation files rather
+than a literal. With the bundled Inter Latin sample, the script prints:
 
-The defaults preserve hinting and text layout data, including the glyphs needed
-for supported substitutions and compound characters. Extra glyphs may therefore
-remain. File-size savings depend on the source and selection; compare the
-original and subset in the same output format when measuring subsetting alone.
+```text
+98 of 98 characters mapped, 409 glyphs kept
+Saved inter-ui.woff (27100 bytes)
+```
 
-![Before and after: selected uppercase letters and digits remain available in the Inter subset; crossed cells are no longer mapped.](assets/figures/subset-before-after.svg)
+The complete sample is 31,792 bytes as WOFF. The saving is small here because
+the sample is already limited to Latin; a complete Inter face also carries
+Greek, Cyrillic, and symbol glyphs, and a subset like this one removes them
+all. The 409 kept glyphs are more than the 98 characters because the default
+layout policy keeps the glyphs that substitutions can reach, such as ligatures
+and alternate figures; [Glyph counts](glyphs/counts.md) explains the numbers.
 
-For this Inter sample, writing the complete face as WOFF produces **31,792
-bytes**, versus **19,784 bytes** for the default subset. The grid shows only
-`A-Z` and `0-9`; lowercase letters, spaces and glyph dependencies are not shown.
-These are measurements for one fixture, not promised savings for every font.
-The measurements use the bundled Inter fixture.
+## Build the character set
 
-## Check missing characters before writing
+`UnicodeSet` holds the selection. It is built from text, from codepoints, from
+ranges, or from CSS `unicode-range` syntax, and sets combine with `union()`,
+`intersect()`, and `without()`. Accented text has two spellings, `é` as one
+codepoint or `e` followed by a combining accent, and a subset must contain the
+one your content uses. [Characters](subset/characters.md) covers the
+constructors and that pitfall.
 
-Characters absent from the source cannot be added by subsetting. They are not
-reported as individual missing-character warnings. Add this check after
-creating `$characters` and before calling `subset()` if every character is required:
+## Choose what to keep
+
+The defaults keep the font faithful: original glyph numbers, hinting
+instructions, and the layout tables that drive ligatures, kerning, and mark
+placement. `GlyphIdPolicy::Compact`, used above, renumbers the glyphs and is
+the one option that removes no rendering data; it is refused for a few table
+structures that cannot be rewritten. Dropping hinting or layout trades
+rendering quality or shaping for bytes. [Policies](subset/policies.md) shows
+each option with measured sizes.
+
+## Check the result before shipping
+
+`subset()` returns the new font together with counts and warnings. A requested
+character that the source does not map is not an error: it is silently absent
+from the result, and `mappedCodepointCount` is the number to compare with
+`count($characters)`. [Results](subset/results.md) shows how to list the
+missing characters, read the warnings, and measure the output.
+
+Test the generated font with real text in the browser or application that will
+use it. Shaping, fallback, and rendering belong to that environment, not to
+the package.
+
+## Subset a variable font
+
+Pass the original variable font. The output keeps every axis, with the
+variation tables remapped. To subset a view selected with `withVariations()`,
+call `withoutVariations()` first. See [Variable fonts](tables/variations.md).
+
+## Subset before embedding in a PDF
 
 ```php
-foreach ($characters as $codepoint) {
-    if (null === $font->glyphIdForCodepoint($codepoint)) {
-        throw new RuntimeException(sprintf('The font has no character U+%04X.', $codepoint));
-    }
-}
+use Alto\Font\Font;
+use Alto\Font\Subset\GlyphIdPolicy;
+use Alto\Font\Subset\SubsetOptions;
+use Alto\Font\Subset\UnicodeSet;
+
+$font = Font::fromFile(__DIR__.'/fonts/Inter-Regular.ttf');
+$result = $font->subset(new SubsetOptions(
+    UnicodeSet::fromText($documentText),
+    glyphIds: GlyphIdPolicy::Compact,
+));
+
+$bytes = $result->font->toSfnt();
+$glyphId = $result->font->glyphIdForCodepoint(0x48);
 ```
 
-To allow missing characters, keep the original recipe and handle fallback in
-the application using the font. For accented text, include the forms your
-application uses: `é` and `e` followed by a combining accent are different
-codepoint sequences. See [Unicode sets](subset/characters.md).
-
-## Review the result
-
-Continue the first script to inspect the retained glyph count and transformation
-messages:
-
-```php
-printf("%d retained glyphs\n", $result->retainedGlyphCount);
-
-foreach ($result->warnings as $warning) {
-    fwrite(STDERR, $warning."\n");
-}
-```
-
-Use `retainedGlyphCount` to understand how much glyph data remains, and
-`filesize()` to measure the written WOFF file. Read each warning before
-distributing the output. The [Subset API](#result-data)
-describes every result field.
-
-The default preserves original glyph numbers and leaves unused slots empty.
-`$result->font->face()->glyphCount` includes these slots, so it is not the
-retained glyph count.
-
-## Adjust the selection or size
-
-- [Build Unicode sets](subset/characters.md) from translations, codepoints, or CSS ranges.
-- [Choose subset options](subset/options.md) to compact glyph numbers or remove hinting or layout data.
-- [Check output size and rendering](subset/options.md#check-output-size-and-rendering) if a font is unsupported or its rendering changes.
-
-Subsetting supports TrueType outlines. Variable fonts retain their axes; this
-does not export a fixed weight. Test the generated font with your actual text
-in the browser or application where it will be used.
-
-## Subset guides
-
-- [Characters](subset/characters.md) builds selections from text, codepoints, ranges, and CSS syntax.
-- [Options](subset/options.md) controls glyph numbering, hinting, and text-layout data.
-- [OpenType](subset/opentype.md) records the table-level preservation and rewriting boundaries.
-
-## Result data
-
-`Font::subset(SubsetOptions $options): SubsetResult` returns a new font and a
-report. It does not modify or write the source file.
-
-| Property | Meaning |
-| --- | --- |
-| `Font $font` | New font to inspect or pass to a writer. |
-| `UnicodeSet $requestedUnicodes` | Normalized selection, including requested characters absent from the source. |
-| `int $mappedCodepointCount` | Requested codepoints found in the source character map. |
-| `int $originalGlyphCount` | Source glyph-slot count. |
-| `int $retainedGlyphCount` | Retained glyphs, including required dependencies and the missing-glyph placeholder. |
-| `int $sfntSize` | Size of the resulting uncompressed SFNT data in bytes. |
-| `list<string> $warnings` | Transformation and preservation messages, not a list of missing characters. |
-
-Preserve mode leaves unused glyph slots empty. Consequently,
-`$result->font->face()->glyphCount` can exceed `retainedGlyphCount`. Use the
-written file's size to measure WOFF or WOFF2 output.
-
-## Failures and side effects
-
-Subsetting may retain glyphs needed by compound outlines or supported
-substitutions beyond the requested character mappings.
-
-`UnsupportedFontException` reports unsupported outlines, selected variable
-views, or structures that cannot be safely preserved or rewritten.
-`InvalidFontException` reports malformed or inconsistent data and invalid
-layout offsets. Both implement `FontExceptionInterface`.
-
-Supported variable fonts retain their axes. Subsetting does not export a static
-instance or restrict axis ranges. Use the original source, or call
-`withoutVariations()` before subsetting a selected view.
+Resolve glyph identifiers and widths from the returned font, because compact
+numbering changes them. The PDF writer remains responsible for the subset font
+name, the font dictionary, the CID mapping, and the ToUnicode map.

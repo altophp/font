@@ -1,25 +1,34 @@
-# Select characters
+# Characters
 
-`UnicodeSet` represents normalized Unicode ranges. It can be created from text,
-codepoints, ranges, or CSS unicode-range syntax.
+Build the set of characters a subset keeps. The set comes from what your
+application displays: its translated strings, the ranges a language needs, or
+a `unicode-range` you already use in CSS. `UnicodeSet` holds it as normalized
+ranges, and `SubsetOptions` takes it as its first argument.
 
-## Select characters from text
+## Select the characters of your strings
+
+Start from the text itself. Repeated characters produce one entry, and the
+input must be valid UTF-8:
 
 ```php
 use Alto\Font\Subset\UnicodeSet;
 
-$characters = UnicodeSet::fromText('Hello, Alto!');
+$translations = ['Ajouter au panier', 'Votre commande est confirmée.'];
+
+$characters = UnicodeSet::fromText(implode(' ', $translations));
 ```
 
-Repeated characters produce one set entry. The input must be valid UTF-8.
+`fromText()` selects exactly the codepoints present. It does not add
+normalization equivalents: `e` followed by a combining acute accent does not
+also select `é`. A text shaper may prefer the composed character when the font
+has it, so include both forms when your content can contain either.
 
-`fromText()` selects the codepoints present in the input. It does not add
-Unicode normalization equivalents: `A` followed by a combining acute accent
-does not also select `Á`. A text shaper may prefer the composed character when
-it exists in the source font, so omitting it can change glyph selection or
-positioning. Include both forms when preserving that behavior matters.
+## Select ranges
 
-## Select codepoints and ranges
+Ranges cover what a literal corpus cannot predict, such as every digit and
+punctuation mark, or a whole script block. Write them as codepoints, as
+`UnicodeRange` values, or in the CSS `unicode-range` syntax, the same text you
+would put in an `@font-face` rule:
 
 ```php
 use Alto\Font\Subset\UnicodeRange;
@@ -73,17 +82,15 @@ Pass the finished set to `SubsetOptions` as shown in
 `UnicodeSet` is immutable, countable, and iterable. Its factories normalize
 repeated or overlapping codepoints into ordered ranges.
 
-| Method | Result |
-| --- | --- |
-| `fromText(string $text)` | Select codepoints from valid UTF-8 text without adding normalization equivalents. |
-| `fromCodepoints(iterable $codepoints)` | Select integer values from U+0000 through U+10FFFF. |
-| `fromRanges(iterable $ranges)` | Merge overlapping or adjacent `UnicodeRange` values. |
-| `fromCss(string $unicodeRange)` | Parse a non-empty CSS unicode-range list, including supported wildcard notation. |
-| `union(UnicodeSet $other)` | Include values in either set. |
-| `intersect(UnicodeSet $other)` | Include values present in both sets. |
-| `without(UnicodeSet $other)` | Remove values present in the other set. |
-| `contains(int $codepoint)` | Test whether one valid codepoint belongs to the set. |
-| `toCss()` | Serialize normalized ranges as CSS unicode-range text. |
+- `fromText(string $text)` selects codepoints from valid UTF-8 text without adding normalization equivalents.
+- `fromCodepoints(iterable $codepoints)` selects integer values from U+0000 through U+10FFFF.
+- `fromRanges(iterable $ranges)` merges overlapping or adjacent `UnicodeRange` values.
+- `fromCss(string $unicodeRange)` parses a non-empty CSS unicode-range list, including supported wildcard notation.
+- `union(UnicodeSet $other)` includes values in either set.
+- `intersect(UnicodeSet $other)` includes values present in both sets.
+- `without(UnicodeSet $other)` removes values present in the other set.
+- `contains(int $codepoint)` tests whether one valid codepoint belongs to the set.
+- `toCss()` serializes normalized ranges as CSS unicode-range text.
 
 `UnicodeRange::single()` selects one codepoint. `UnicodeRange::between()` uses
 inclusive bounds. Invalid bounds, codepoints, or CSS syntax raise

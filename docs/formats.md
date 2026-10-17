@@ -1,66 +1,31 @@
-# Font formats
+# Formats
 
-`Font::fromFile()` detects the container from its signature. The reported
-format therefore remains correct when a file has no extension or a misleading
-extension.
+Check here whether a file can be read, and what the package can do with it
+once loaded. The container is detected from the first four bytes of the file,
+never from its extension: a file renamed to `.ttf` is still what its
+signature says.
 
-| Format | Support | Requirement or boundary |
-| --- | --- | --- |
-| TrueType with `glyf` outlines | Supported | Includes compound glyphs |
-| OpenType with `glyf` outlines | Supported | CFF and CFF2 outlines are rejected |
-| WOFF 1 | Supported | Requires the Zlib extension |
-| WOFF2 | Supported | Reading requires `ext-brotli` or the `brotli` executable; writing requires an explicit compressor |
-| TTC and OTC collections | Supported | Select a face with `faceIndex` |
-| WOFF2 collections | Not supported | Rejected explicitly |
-| Variable `glyf` fonts | Supported | Includes `fvar`, `avar`, `gvar`, and `HVAR`; compact subsets can remap `VVAR` with `vhea` and `vmtx` |
-| Color glyphs | Not supported | COLR, CPAL, SVG, sbix, CBDT, and CBLC are not rendered |
+| Format | Signature | Reported as | Support |
+| --- | --- | --- | --- |
+| [TrueType](formats/truetype.md) | `0x00010000` or `true` | `FontFormat::TrueType` | Read, write, subset |
+| [OpenType](formats/opentype.md) with CFF outlines | `OTTO` | `FontFormat::OpenType` | Rejected: CFF and CFF2 outlines are not supported |
+| [Collections](formats/collections.md) | `ttcf` | `FontFormat::TrueTypeCollection` | Read one face, write it standalone |
+| [WOFF](formats/woff.md) | `wOFF` | `FontFormat::Woff` | Read, write; requires the Zlib extension |
+| [WOFF2](formats/woff2.md) | `wOF2` | `FontFormat::Woff2` | Read, write; requires Brotli |
 
-Container and outline support does not guarantee that every table can be
-rewritten for compact subsetting. See [OpenType subsetting support](subset/opentype.md)
-for layout offset limits and the boundaries of variable-font compaction.
-Static variable-font export and axis-range reduction are not supported.
+Within those containers, the outlines decide what the package can do. It
+works on TrueType `glyf` outlines, compound glyphs included, and on variable
+`glyf` fonts with their `fvar`, `avar`, `gvar`, and `HVAR` tables; compact
+subsets also remap `VVAR` with `vhea` and `vmtx`. [OpenType](formats/opentype.md)
+explains what to do with a CFF font, and [Tables](tables.md) lists what a
+compact subset rewrites.
 
-## Font collections
+## Detection
 
-Select a zero-based face when loading a TrueType or OpenType collection:
+`metadata()->format` and `face()->format` report the detected container.
+`FontFormat::fromPath()` maps an extension to the format it usually holds,
+which is useful for filtering candidates before loading, but loading always
+trusts the signature. An `.otf` file whose signature is `0x00010000`
+therefore loads and reports `TrueType`.
 
-```php
-use Alto\Font\Font;
-
-$font = Font::fromFile(__DIR__.'/fonts/Collection.ttc', faceIndex: 1);
-
-echo $font->face()->faceIndex;
-echo $font->face()->faceCount;
-```
-
-An index outside the collection raises `InvalidFontException`.
-
-## WOFF2 decompression
-
-WOFF2 uses Brotli compression. ALTO Font first uses the PHP Brotli extension
-when it is available, then falls back to the `brotli` command-line program.
-If neither is available, loading a WOFF2 file fails rather than silently
-returning incomplete data.
-
-WOFF2 support includes transformed `glyf`, `loca`, and `hmtx` tables for
-single-font files.
-
-## Failure types
-
-Catch the shared interface when the recovery action is the same for every
-font-loading problem:
-
-```php
-use Alto\Font\Exception\FontExceptionInterface;
-use Alto\Font\Font;
-
-try {
-    $font = Font::fromFile($path);
-} catch (FontExceptionInterface $error) {
-    // Reject the file or try another candidate.
-}
-```
-
-Use `UnsupportedFontException` when you need to distinguish a valid but
-unsupported feature from an `InvalidFontException` caused by malformed data
-or an invalid selection.
+Loading failures raise the exceptions described in [Errors](errors.md).
