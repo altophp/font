@@ -681,6 +681,26 @@ final class FontTest extends TestCase
         return pack('n4N', 0, 1, 3, 10, 12) . pack('n2N3', 12, 0, 28, 0, 1) . pack('N3', $start, $end, $glyphId);
     }
 
+    public function testItDoesNotRetainTheInputBytesInTheExceptionTrace(): void
+    {
+        $data = "\x00\x01\x00\x00" . pack('n4', 4000, 0, 0, 0) . str_repeat('A', 8 * 1024 * 1024);
+
+        try {
+            Font::fromBytes($data);
+            self::fail('The malformed input must be rejected.');
+        } catch (InvalidFontException $exception) {
+            self::assertSame('Required table "cmap" is missing.', $exception->getMessage());
+            self::assertNull($exception->getPrevious());
+
+            foreach ($exception->getTrace() as $frame) {
+                foreach ($frame['args'] ?? [] as $argument) {
+                    self::assertFalse($argument instanceof \Throwable, 'The trace must not keep the original exception alive.');
+                    self::assertTrue(!\is_string($argument) || \strlen($argument) < 1024, 'The trace must not carry font bytes.');
+                }
+            }
+        }
+    }
+
     private static function fontPath(): string
     {
         $path = sys_get_temp_dir() . '/alto-font-font-' . bin2hex(random_bytes(4)) . '.ttf';

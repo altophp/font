@@ -275,6 +275,27 @@ final class FontLoaderTest extends TestCase
         self::assertSame(2048, Font::fromFile($path, faceIndex: 1)->face()->unitsPerEm);
     }
 
+    public function testItDoesNotRetainTheFileContentsInTheExceptionTrace(): void
+    {
+        $path = $this->temporaryPath('malformed.ttf');
+        file_put_contents($path, "\x00\x01\x00\x00" . pack('n4', 4000, 0, 0, 0) . str_repeat('A', 8 * 1024 * 1024));
+
+        try {
+            self::loadFont($path);
+            self::fail('The malformed file must be rejected.');
+        } catch (InvalidFontException $exception) {
+            self::assertSame('Required table "cmap" is missing.', $exception->getMessage());
+            self::assertNull($exception->getPrevious());
+
+            foreach ($exception->getTrace() as $frame) {
+                foreach ($frame['args'] ?? [] as $argument) {
+                    self::assertFalse($argument instanceof \Throwable, 'The trace must not keep the original exception alive.');
+                    self::assertTrue(!\is_string($argument) || \strlen($argument) < 1024, 'The trace must not carry font bytes.');
+                }
+            }
+        }
+    }
+
     private static function loadFont(string $path): Font
     {
         return (new FontLoader())->load($path);
