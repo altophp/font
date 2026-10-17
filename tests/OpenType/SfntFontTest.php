@@ -525,6 +525,56 @@ final class SfntFontTest extends TestCase
         $font->glyphOutline(new GlyphId(4));
     }
 
+    public function testItFollowsCompoundChainsUpToTheNestingLimit(): void
+    {
+        $path = sys_get_temp_dir() . '/alto-font-compound-chain-' . bin2hex(random_bytes(4)) . '.ttf';
+        TinyTrueTypeFont::writeCompoundChain($path, depth: 64);
+        $font = SfntFont::open($path);
+
+        $outline = $font->glyphOutline(new GlyphId(0));
+
+        self::assertCount(1, $outline->contours);
+        self::assertSame('M 164 0 L 364 700 L 564 0 L 164 0 Z', self::describeContour($outline->contours[0]));
+    }
+
+    public function testItRejectsCompoundChainsDeeperThanTheNestingLimit(): void
+    {
+        $path = sys_get_temp_dir() . '/alto-font-compound-chain-' . bin2hex(random_bytes(4)) . '.ttf';
+        TinyTrueTypeFont::writeCompoundChain($path, depth: 65);
+        $font = SfntFont::open($path);
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('Compound glyph nesting exceeds 64 levels at glyph ID 65.');
+
+        $font->glyphOutline(new GlyphId(0));
+    }
+
+    public function testItDecodesCompoundChainsWithoutCopyingTheGlyfTablePerLevel(): void
+    {
+        $path = sys_get_temp_dir() . '/alto-font-compound-chain-' . bin2hex(random_bytes(4)) . '.ttf';
+        TinyTrueTypeFont::writeCompoundChain($path, depth: 64, padding: 1024 * 1024);
+        $font = SfntFont::open($path);
+        memory_reset_peak_usage();
+        $before = memory_get_usage();
+
+        $outline = $font->glyphOutline(new GlyphId(0));
+
+        self::assertCount(1, $outline->contours);
+        self::assertLessThan(16 * 1024 * 1024, memory_get_peak_usage() - $before);
+    }
+
+    public function testItRejectsCompoundGlyphMetricsCycles(): void
+    {
+        $path = sys_get_temp_dir() . '/alto-font-use-my-metrics-cycle-' . bin2hex(random_bytes(4)) . '.ttf';
+        TinyTrueTypeFont::writeVariableWithUseMyMetricsCycle($path);
+        $font = SfntFont::open($path);
+
+        $this->expectException(InvalidFontException::class);
+        $this->expectExceptionMessage('Compound glyph metrics cycle detected at glyph ID 4.');
+
+        $font->glyphMetrics(new GlyphId(4), new VariationCoordinates(['wght' => 900]));
+    }
+
     public function testItExposesItsDocumentAndSubsetsDirectly(): void
     {
         $font = SfntFont::open(self::fontPath());

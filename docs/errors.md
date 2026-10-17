@@ -26,7 +26,8 @@ can succeed where this one failed.
 
 The package raises it when the file is missing, unreadable, empty, or
 malformed; when a WOFF2 stream fails to decompress; when a face index is
-outside the collection; when a glyph identifier is out of range; or when
+outside the collection; when a glyph identifier is out of range; when a
+composite glyph refers to itself or nests deeper than 64 levels; or when
 coordinates are selected on a static font or name an unknown axis.
 
 Check the path and the face index, then use another source file. The data
