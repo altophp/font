@@ -72,8 +72,8 @@ final readonly class GlyfSubsetter
         $mappings = [];
         $requestedGlyphs = [0 => true];
 
-        foreach ($cmap->mappings() as $codepoint => $glyphId) {
-            if (!$options->unicodes->contains($codepoint) || 0 === $glyphId) {
+        foreach ($cmap->mappings($options->unicodes) as $codepoint => $glyphId) {
+            if (0 === $glyphId) {
                 continue;
             }
 
