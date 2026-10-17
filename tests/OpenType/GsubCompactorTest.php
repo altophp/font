@@ -16,11 +16,16 @@ namespace Alto\Font\Tests\OpenType;
 use Alto\Font\Binary\BinaryReader;
 use Alto\Font\Exception\InvalidFontException;
 use Alto\Font\Exception\UnsupportedFontException;
+use Alto\Font\Font;
 use Alto\Font\OpenType\GlyphIdMap;
 use Alto\Font\OpenType\GsubCompactor;
 use Alto\Font\OpenType\Layout\ClassDefinitionTable;
 use Alto\Font\OpenType\Layout\CoverageTable;
 use Alto\Font\OpenType\Table\GsubTable;
+use Alto\Font\Subset\GlyphIdPolicy;
+use Alto\Font\Subset\SubsetOptions;
+use Alto\Font\Subset\UnicodeSet;
+use Alto\Font\Writer\SfntWriter;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -49,18 +54,78 @@ final class GsubCompactorTest extends TestCase
         yield 'extension in mark filtering set' => [pack('n*', 7, 0x10, 1, 8, 1, 1) . pack('N', 8) . $single];
     }
 
+    public function testItKeepsCompactedInterSubstitutionsCloseToTheSourceSize(): void
+    {
+        try {
+            $font = Font::fromFile(__DIR__ . '/../Fixtures/Fonts/Inter-Regular-latin.woff2');
+        } catch (UnsupportedFontException) {
+            self::markTestSkipped('Reading the WOFF2 fixture requires a Brotli decoder.');
+        }
+
+        $characters = UnicodeSet::fromCss('U+0020-007E, U+00A0-00FF');
+        $preserved = self::gsubOf(new SfntWriter()->dump($font->subset(new SubsetOptions($characters))->font));
+        $compacted = self::gsubOf(new SfntWriter()->dump(
+            $font->subset(new SubsetOptions($characters, glyphIds: GlyphIdPolicy::Compact))->font,
+        ));
+
+        // Measured on the fixture: 10,992 bytes in the source, 17,492 compacted, 148,996 before the fix.
+        self::assertLessThan(2 * \strlen($preserved), \strlen($compacted));
+        self::assertSame(self::lookupTypes($preserved), self::lookupTypes($compacted));
+        self::assertNotContains(7, self::lookupTypes($compacted));
+    }
+
+    public function testItSharesIdenticalCoverageTablesInsideAChainedContext(): void
+    {
+        $chain = self::u16(3)
+            . self::u16(1) . self::u16(16)
+            . self::u16(1) . self::u16(22)
+            . self::u16(1) . self::u16(28)
+            . self::u16(0)
+            . self::coverage(1) . self::coverage(1) . self::coverage(1);
+        $mapping = GlyphIdMap::fromRetained(3, [1 => true, 2 => true]);
+        [$reader, $offset] = self::firstSubtable(GsubCompactor::compact(self::gsub(6, $chain), $mapping));
+
+        self::assertSame(3, $reader->uint16($offset));
+        self::assertSame(
+            [16, 16, 16],
+            [$reader->uint16($offset + 4), $reader->uint16($offset + 8), $reader->uint16($offset + 12)],
+        );
+        self::assertSame([1], CoverageTable::parse($reader, $offset, 16));
+    }
+
+    public function testItSharesIdenticalLigatureSets(): void
+    {
+        $ligature = self::u16(3) . self::u16(2) . self::u16(4);
+        $set = self::offsetList([$ligature]);
+        $subtable = self::u16(1)
+            . self::u16(10 + 2 * \strlen($set))
+            . self::u16(2)
+            . self::u16(10)
+            . self::u16(10 + \strlen($set))
+            . $set
+            . $set
+            . CoverageTable::build([1, 2]);
+        $mapping = GlyphIdMap::fromRetained(5, [1 => true, 2 => true, 3 => true, 4 => true]);
+        [$reader, $offset] = self::firstSubtable(GsubCompactor::compact(self::gsub(4, $subtable), $mapping));
+
+        self::assertSame(2, $reader->uint16($offset + 4));
+        self::assertSame($reader->uint16($offset + 6), $reader->uint16($offset + 8));
+        self::assertSame([1, 2], CoverageTable::parse($reader, $offset, $reader->uint16($offset + 2)));
+        self::assertSame(3, $reader->uint16($offset + $reader->uint16($offset + 6) + 4));
+    }
+
     public function testItUsesExtensionLookupsWhenTheLookupListOffsetsOverflow(): void
     {
-        $glyphCount = 16384;
-        $glyphs = range(0, $glyphCount - 1);
+        $glyphCount = 32767;
+        $glyphs = range(0, $glyphCount - 1, 2);
         $coverage = CoverageTable::build($glyphs);
         $largeSingle = self::u16(2)
-            . self::u16(6 + $glyphCount * 2)
-            . self::u16($glyphCount)
+            . self::u16(6 + \count($glyphs) * 2)
+            . self::u16(\count($glyphs))
             . pack('n*', ...$glyphs)
             . $coverage;
         $smallSingle = self::u16(1) . self::u16(6) . self::u16(0) . CoverageTable::build([0]);
-        $retained = array_fill_keys($glyphs, true);
+        $retained = array_fill_keys(range(0, $glyphCount - 1), true);
         $output = GsubCompactor::compact(
             self::layoutWithTwoExtensionLookups(7, 1, $largeSingle, $smallSingle),
             GlyphIdMap::fromRetained($glyphCount, $retained),
@@ -79,23 +144,16 @@ final class GsubCompactorTest extends TestCase
 
     public function testItUsesAnExtensionLookupWhenASubtableOffsetOverflows(): void
     {
-        $glyphCount = 16384;
-        $glyphs = range(0, $glyphCount - 1);
-        $compactCoverage = self::u16(2)
-            . self::u16(1)
-            . self::u16(0)
-            . self::u16($glyphCount - 1)
-            . self::u16(0);
-        $largeSingle = self::u16(2)
-            . self::u16(6 + $glyphCount * 2)
-            . self::u16($glyphCount)
-            . pack('n*', ...$glyphs)
-            . $compactCoverage;
+        $glyphCount = 32767;
+        $glyphs = range(0, $glyphCount - 1, 2);
+        // A delta substitution over 16384 sparse glyphs fits the source lookup; compaction rewrites it
+        // as explicit pairs, which pushes the second subtable beyond a 16-bit offset.
+        $largeSingle = self::u16(1) . self::u16(6) . self::u16(0) . CoverageTable::build($glyphs);
         $smallSingle = self::u16(1) . self::u16(6) . self::u16(0) . CoverageTable::build([0]);
         $lookup = self::lookupWithSubtables(1, [$largeSingle, $smallSingle]);
         $output = GsubCompactor::compact(
             self::gsubWithLookup($lookup),
-            GlyphIdMap::fromRetained($glyphCount, array_fill_keys($glyphs, true)),
+            GlyphIdMap::fromRetained($glyphCount, array_fill_keys(range(0, $glyphCount - 1), true)),
         );
         $reader = new BinaryReader($output, 'large compacted GSUB lookup');
         $lookupList = $reader->uint16(8);
@@ -1057,6 +1115,37 @@ final class GsubCompactorTest extends TestCase
             . self::u16(0)
             . self::u16(0)
             . $lookupList;
+    }
+
+    private static function gsubOf(string $sfnt): string
+    {
+        $reader = new BinaryReader($sfnt, 'subset sfnt');
+
+        for ($index = 0, $count = $reader->uint16(4); $index < $count; ++$index) {
+            $record = 12 + $index * 16;
+
+            if ('GSUB' === $reader->string($record, 4)) {
+                return $reader->string($reader->uint32($record + 8), $reader->uint32($record + 12));
+            }
+        }
+
+        self::fail('The subset has no GSUB table.');
+    }
+
+    /**
+     * @return list<int>
+     */
+    private static function lookupTypes(string $gsub): array
+    {
+        $reader = new BinaryReader($gsub, 'subset GSUB');
+        $lookupList = $reader->uint16(8);
+        $types = [];
+
+        for ($index = 0, $count = $reader->uint16($lookupList); $index < $count; ++$index) {
+            $types[] = $reader->uint16($lookupList + $reader->uint16($lookupList + 2 + $index * 2));
+        }
+
+        return $types;
     }
 
     private static function coverage(int $glyphId): string

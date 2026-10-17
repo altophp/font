@@ -235,17 +235,17 @@ final class GposCompactorTest extends TestCase
 
     public function testItUsesExtensionLookupsWhenTheLookupListOffsetsOverflow(): void
     {
-        $glyphCount = 16384;
-        $glyphs = range(0, $glyphCount - 1);
+        $glyphCount = 32767;
+        $glyphs = range(0, $glyphCount - 1, 2);
         $coverage = CoverageTable::build($glyphs);
         $largeSingle = self::u16(2)
-            . self::u16(8 + $glyphCount * 2)
+            . self::u16(8 + \count($glyphs) * 2)
             . self::u16(0x0004)
-            . self::u16($glyphCount)
-            . str_repeat("\0\0", $glyphCount)
+            . self::u16(\count($glyphs))
+            . str_repeat("\0\0", \count($glyphs))
             . $coverage;
         $smallSingle = self::u16(1) . self::u16(6) . self::u16(0) . CoverageTable::build([0]);
-        $retained = array_fill_keys($glyphs, true);
+        $retained = array_fill_keys(range(0, $glyphCount - 1), true);
         $output = GposCompactor::compact(
             self::layoutWithTwoExtensionLookups(9, 1, $largeSingle, $smallSingle),
             GlyphIdMap::fromRetained($glyphCount, $retained),
@@ -264,24 +264,25 @@ final class GposCompactorTest extends TestCase
 
     public function testItUsesAnExtensionLookupWhenASubtableOffsetOverflows(): void
     {
-        $glyphCount = 16384;
-        $glyphs = range(0, $glyphCount - 1);
-        $compactCoverage = self::u16(2)
-            . self::u16(1)
-            . self::u16(0)
-            . self::u16($glyphCount - 1)
-            . self::u16(0);
+        $glyphCount = 32767;
+        $glyphs = range(0, $glyphCount - 1, 2);
+        // 16384 sparse values and their coverage exceed a 16-bit subtable offset, so the source
+        // lookup already needs extension wrappers; compaction must keep them.
         $largeSingle = self::u16(2)
-            . self::u16(8 + $glyphCount * 2)
+            . self::u16(8 + \count($glyphs) * 2)
             . self::u16(0x0004)
-            . self::u16($glyphCount)
-            . str_repeat("\0\0", $glyphCount)
-            . $compactCoverage;
+            . self::u16(\count($glyphs))
+            . str_repeat("\0\0", \count($glyphs))
+            . CoverageTable::build($glyphs);
         $smallSingle = self::u16(1) . self::u16(6) . self::u16(0) . CoverageTable::build([0]);
-        $lookup = self::lookupWithSubtables(1, [$largeSingle, $smallSingle]);
+        $lookup = self::u16(9) . self::u16(0) . self::u16(2) . self::u16(10) . self::u16(18)
+            . self::u16(1) . self::u16(1) . self::u32(26 - 10)
+            . self::u16(1) . self::u16(1) . self::u32(26 + \strlen($largeSingle) - 18)
+            . $largeSingle
+            . $smallSingle;
         $output = GposCompactor::compact(
             self::gposWithLookup($lookup),
-            GlyphIdMap::fromRetained($glyphCount, array_fill_keys($glyphs, true)),
+            GlyphIdMap::fromRetained($glyphCount, array_fill_keys(range(0, $glyphCount - 1), true)),
         );
         $reader = new BinaryReader($output, 'large compacted GPOS lookup');
         $lookupList = $reader->uint16(8);
@@ -1357,23 +1358,6 @@ final class GposCompactorTest extends TestCase
             . $subtable;
     }
 
-    /**
-     * @param non-empty-list<string> $subtables
-     */
-    private static function lookupWithSubtables(int $type, array $subtables): string
-    {
-        $header = self::u16($type) . self::u16(0) . self::u16(\count($subtables));
-        $data = '';
-        $cursor = 6 + \count($subtables) * 2;
-
-        foreach ($subtables as $subtable) {
-            $header .= self::u16($cursor);
-            $data .= $subtable;
-            $cursor += \strlen($subtable);
-        }
-
-        return $header . $data;
-    }
 
     private static function gposWithLookup(string $lookup): string
     {

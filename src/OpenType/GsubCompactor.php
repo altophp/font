@@ -475,12 +475,17 @@ final readonly class GsubCompactor
             . self::uint16($glyphCount)
             . self::uint16($sequenceLookupCount);
         $coverageData = '';
+        $coverageOffsets = [];
         $coverageOffset = $headerLength;
 
         foreach ($coverages as $coverage) {
-            $header .= self::offset16($coverageOffset);
-            $coverageData .= $coverage;
-            $coverageOffset += \strlen($coverage);
+            if (!isset($coverageOffsets[$coverage])) {
+                $coverageOffsets[$coverage] = $coverageOffset;
+                $coverageData .= $coverage;
+                $coverageOffset += \strlen($coverage);
+            }
+
+            $header .= self::offset16($coverageOffsets[$coverage]);
         }
 
         return $header . $records . $coverageData;
@@ -942,23 +947,23 @@ final readonly class GsubCompactor
         }
 
         $headerLength = 6 + \count($sets) * 2;
-        $header = self::uint16(1);
         $data = '';
+        $setOffsets = [];
         $cursor = $headerLength;
 
         foreach ($sets as $set) {
-            $data .= $set;
-            $cursor += \strlen($set);
+            if (!isset($setOffsets[$set])) {
+                $setOffsets[$set] = $cursor;
+                $data .= $set;
+                $cursor += \strlen($set);
+            }
         }
 
         $coverageData = self::buildCoverage($inputs);
-        $coverageOffset = $cursor;
-        $cursor = $headerLength;
-        $header .= self::offset16($coverageOffset) . self::uint16(\count($sets));
+        $header = self::uint16(1) . self::offset16($cursor) . self::uint16(\count($sets));
 
         foreach ($sets as $set) {
-            $header .= self::offset16($cursor);
-            $cursor += \strlen($set);
+            $header .= self::offset16($setOffsets[$set]);
         }
 
         return $header . $data . $coverageData;
@@ -1181,6 +1186,7 @@ final readonly class GsubCompactor
             + 2 + \count($lookahead) * 2
             + 2 + \strlen($records);
         $coverageData = '';
+        $coverageOffsets = [];
         $coverageCursor = $headerLength;
         $header = self::uint16(3);
 
@@ -1188,9 +1194,13 @@ final readonly class GsubCompactor
             $header .= self::uint16(\count($sequence));
 
             foreach ($sequence as $coverage) {
-                $header .= self::offset16($coverageCursor);
-                $coverageData .= $coverage;
-                $coverageCursor += \strlen($coverage);
+                if (!isset($coverageOffsets[$coverage])) {
+                    $coverageOffsets[$coverage] = $coverageCursor;
+                    $coverageData .= $coverage;
+                    $coverageCursor += \strlen($coverage);
+                }
+
+                $header .= self::offset16($coverageOffsets[$coverage]);
             }
         }
 
@@ -1442,11 +1452,7 @@ final readonly class GsubCompactor
      */
     private static function buildCoverage(array $glyphs): string
     {
-        sort($glyphs, \SORT_NUMERIC);
-
-        return self::uint16(1)
-            . self::uint16(\count($glyphs))
-            . implode('', array_map(self::uint16(...), $glyphs));
+        return CoverageTable::build($glyphs);
     }
 
     /**
@@ -1457,12 +1463,17 @@ final readonly class GsubCompactor
         $headerLength = 2 + \count($items) * 2;
         $header = self::uint16(\count($items));
         $data = '';
+        $offsets = [];
         $cursor = $headerLength;
 
         foreach ($items as $item) {
-            $header .= self::offset16($cursor);
-            $data .= $item;
-            $cursor += \strlen($item);
+            if (!isset($offsets[$item])) {
+                $offsets[$item] = $cursor;
+                $data .= $item;
+                $cursor += \strlen($item);
+            }
+
+            $header .= self::offset16($offsets[$item]);
         }
 
         return $header . $data;
