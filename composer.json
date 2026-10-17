@@ -1,6 +1,6 @@
 {
     "name": "alto/font",
-    "description": "Font file loading and discovery, font data inspection, format conversion, WOFF2 compression, and Unicode subsetting.",
+    "description": "Read, inspect, convert, and subset OpenType, TrueType, WOFF, and WOFF2 fonts in PHP.",
     "license": "MIT",
     "type": "library",
     "keywords": [
@@ -8,7 +8,9 @@
         "opentype",
         "truetype",
         "woff",
-        "woff2"
+        "woff2",
+        "subset",
+        "webfont"
     ],
     "authors": [
         {
