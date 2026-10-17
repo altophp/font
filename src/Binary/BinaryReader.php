@@ -19,15 +19,37 @@ use Alto\Font\OpenType\Table\TableRecord;
 /**
  * Reads typed values from bounded binary font data.
  *
+ * A reader is a window over a byte string: an offset and a length. Table
+ * readers created with table() share the bytes of the reader they come from
+ * instead of copying them, so a window costs one small object whatever the
+ * size of the table it exposes. Every read is bounds-checked against the
+ * window; offsets are relative to the window start.
+ *
  * @author Simon André <smn.andre@gmail.com>
  */
 final readonly class BinaryReader
 {
-    public function __construct(private string $data, private string $source) {}
+    private int $length;
+
+    public function __construct(
+        private string $data,
+        private string $source,
+        private int $offset = 0,
+        ?int $length = null,
+    ) {
+        $available = \strlen($data) - $offset;
+        $length ??= $available;
+
+        if ($offset < 0 || $length < 0 || $length > $available) {
+            throw new InvalidFontException(\sprintf('Font data window out of bounds in %s at offset %d for %d bytes.', $source, $offset, $length));
+        }
+
+        $this->length = $length;
+    }
 
     public function length(): int
     {
-        return \strlen($this->data);
+        return $this->length;
     }
 
     /**
@@ -35,14 +57,18 @@ final readonly class BinaryReader
      */
     public function bytes(): string
     {
-        return $this->data;
+        if (0 === $this->offset && $this->length === \strlen($this->data)) {
+            return $this->data;
+        }
+
+        return substr($this->data, $this->offset, $this->length);
     }
 
     public function uint8(int $offset): int
     {
         $this->assertRange($offset, 1);
 
-        return \ord($this->data[$offset]);
+        return \ord($this->data[$this->offset + $offset]);
     }
 
     public function int8(int $offset): int
@@ -55,6 +81,7 @@ final readonly class BinaryReader
     public function uint16(int $offset): int
     {
         $this->assertRange($offset, 2);
+        $offset += $this->offset;
 
         return (\ord($this->data[$offset]) << 8) | \ord($this->data[$offset + 1]);
     }
@@ -76,6 +103,7 @@ final readonly class BinaryReader
     public function uint32(int $offset): int
     {
         $this->assertRange($offset, 4);
+        $offset += $this->offset;
 
         return (\ord($this->data[$offset]) << 24)
             | (\ord($this->data[$offset + 1]) << 16)
@@ -103,17 +131,22 @@ final readonly class BinaryReader
     {
         $this->assertRange($offset, $length);
 
-        return substr($this->data, $offset, $length);
+        return substr($this->data, $this->offset + $offset, $length);
     }
 
+    /**
+     * Returns a reader over the record's byte range, sharing this reader's bytes.
+     */
     public function table(TableRecord $record): self
     {
-        return new self($this->string($record->offset, $record->length), $this->source . '#' . $record->tag);
+        $this->assertRange($record->offset, $record->length);
+
+        return new self($this->data, $this->source . '#' . $record->tag, $this->offset + $record->offset, $record->length);
     }
 
     private function assertRange(int $offset, int $length): void
     {
-        if ($offset < 0 || $length < 0 || $offset + $length > \strlen($this->data)) {
+        if ($offset < 0 || $length < 0 || $offset + $length > $this->length) {
             throw new InvalidFontException(\sprintf('Font data read out of bounds in %s at offset %d for %d bytes.', $this->source, $offset, $length));
         }
     }

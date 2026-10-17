@@ -196,6 +196,52 @@ final class TinyTrueTypeFont
         )));
     }
 
+    /**
+     * Glyph 0 references glyph 1, glyph 1 references glyph 2, and so on for
+     * $depth composite levels down to a simple triangle; every level shifts
+     * its component by one unit on the x axis. $padding bytes of empty glyph
+     * data follow the chain, which inflates the glyf table without adding
+     * outline work.
+     */
+    public static function writeCompoundChain(string $path, int $depth, int $padding = 0): void
+    {
+        $glyphs = [];
+
+        for ($i = 0; $i < $depth; ++$i) {
+            $glyphs[] = self::compoundGlyph($i + 1, 1, 0);
+        }
+
+        $glyphs[] = self::simpleGlyph([[100, 0], [300, 700], [500, 0]]);
+
+        if ($padding > 0) {
+            $glyphs[] = str_repeat("\0", $padding);
+        }
+
+        $glyf = '';
+        $loca = [];
+        $hmtx = '';
+
+        foreach ($glyphs as $glyph) {
+            $loca[] = \strlen($glyf);
+            $glyf .= self::align4($glyph);
+            $hmtx .= self::u16(500).self::i16(0);
+        }
+
+        $loca[] = \strlen($glyf);
+
+        $tables = [
+            'cmap' => self::cmap(),
+            'glyf' => $glyf,
+            'head' => self::head(),
+            'hhea' => self::hhea(\count($glyphs)),
+            'hmtx' => $hmtx,
+            'loca' => self::loca($loca),
+            'maxp' => self::maxp(\count($glyphs)),
+        ];
+
+        file_put_contents($path, self::sfnt($tables));
+    }
+
     public static function writeCompoundWithInstructions(string $path): void
     {
         file_put_contents($path, self::sfnt(self::tables(
@@ -289,6 +335,16 @@ final class TinyTrueTypeFont
     public static function writeVariableWithUseMyMetricsGvar(string $path): void
     {
         $tables = self::tables(compoundCycle: false, unsupportedCff: false, useMyMetrics: true);
+        $tables['fvar'] = self::fvar();
+        $tables['gvar'] = self::compoundPhantomGvar();
+        ksort($tables);
+
+        file_put_contents($path, self::sfnt($tables));
+    }
+
+    public static function writeVariableWithUseMyMetricsCycle(string $path): void
+    {
+        $tables = self::tables(compoundCycle: false, unsupportedCff: false, compoundGlyph: self::compoundGlyph(4, 0, 0, useMyMetrics: true));
         $tables['fvar'] = self::fvar();
         $tables['gvar'] = self::compoundPhantomGvar();
         ksort($tables);
@@ -760,12 +816,12 @@ final class TinyTrueTypeFont
         return $data;
     }
 
-    private static function hhea(): string
+    private static function hhea(int $numberOfHMetrics = 5): string
     {
         $data = str_repeat("\0", 36);
         self::put($data, 4, self::i16(800));
         self::put($data, 6, self::i16(-200));
-        self::put($data, 34, self::u16(5));
+        self::put($data, 34, self::u16($numberOfHMetrics));
 
         return $data;
     }
@@ -809,9 +865,9 @@ final class TinyTrueTypeFont
             .self::i16(40);
     }
 
-    private static function maxp(): string
+    private static function maxp(int $glyphCount = 5): string
     {
-        return "\x00\x01\x00\x00".self::u16(5).str_repeat("\0", 26);
+        return "\x00\x01\x00\x00".self::u16($glyphCount).str_repeat("\0", 26);
     }
 
     private static function os2(): string

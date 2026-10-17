@@ -57,6 +57,16 @@ final readonly class SfntFont
     private const int USE_MY_METRICS = 0x0200;
 
     /**
+     * Deepest composite nesting glyphOutline() and glyphMetrics() follow.
+     *
+     * Real fonts nest components a few levels deep (maxp records the figure
+     * as maxComponentDepth, usually 1 to 4) and HarfBuzz stops at 64 too. A
+     * longer chain is hostile input: each level costs a stack frame, so the
+     * chain is rejected before it can grow without bound.
+     */
+    private const int MAX_COMPOSITE_DEPTH = 64;
+
+    /**
      * Hard ceiling on the total decompressed table size for WOFF/WOFF2
      * containers, checked before decompression runs. Real fonts never get
      * remotely close to this; a small file claiming to need more is a
@@ -495,17 +505,26 @@ final readonly class SfntFont
             return $metrics;
         }
 
-        $metricsGlyphId = $this->componentMetricsGlyphId($glyphId);
+        $glyf = $this->glyf();
+        $visited = [$glyphId->value => true];
 
-        if (null !== $metricsGlyphId) {
-            if ($metricsGlyphId->value === $glyphId->value) {
-                throw new InvalidFontException(\sprintf('Compound glyph metrics cycle detected at glyph ID %d.', $glyphId->value));
+        while (null !== $metricsGlyphId = $this->componentMetricsGlyphId($glyf, $glyphId)) {
+            $this->assertGlyphId($metricsGlyphId);
+
+            if (isset($visited[$metricsGlyphId->value])) {
+                throw new InvalidFontException(\sprintf('Compound glyph metrics cycle detected at glyph ID %d.', $metricsGlyphId->value));
             }
 
-            return $this->glyphMetrics($metricsGlyphId, $coordinates);
+            if (\count($visited) > self::MAX_COMPOSITE_DEPTH) {
+                throw new InvalidFontException(\sprintf('Compound glyph nesting exceeds %d levels at glyph ID %d.', self::MAX_COMPOSITE_DEPTH, $metricsGlyphId->value));
+            }
+
+            $visited[$metricsGlyphId->value] = true;
+            $glyphId = $metricsGlyphId;
+            $metrics = $this->metrics[$glyphId->value];
         }
 
-        $pointCount = $this->glyphPointCount($glyphId);
+        $pointCount = $this->glyphPointCount($glyf, $glyphId);
         $deltas = $this->gvar->deltasForGlyph($glyphId->value, $pointCount + 4, $normalizedCoordinates);
         $leftSideBearingDelta = (int) round($deltas->x[$pointCount] ?? 0.0);
         $advanceWidthDelta = (int) round(($deltas->x[$pointCount + 1] ?? 0.0) - $leftSideBearingDelta);
@@ -523,18 +542,30 @@ final readonly class SfntFont
 
     public function glyphOutline(GlyphId $glyphId, ?VariationCoordinates $coordinates = null): GlyphOutline
     {
-        return $this->readGlyph($glyphId, [], $this->normalizedCoordinates($coordinates));
+        return $this->readGlyph($this->glyf(), $glyphId, [], $this->normalizedCoordinates($coordinates));
     }
 
     /**
-     * @param array<int, true> $visited
+     * Opens the glyf table once per request; the window shares the font bytes.
      */
-    private function readGlyph(GlyphId $glyphId, array $visited, ?NormalizedCoordinates $coordinates): GlyphOutline
+    private function glyf(): BinaryReader
+    {
+        return $this->reader->table($this->tables['glyf']);
+    }
+
+    /**
+     * @param array<int, true> $visited glyphs on the path from the requested glyph to this one
+     */
+    private function readGlyph(BinaryReader $glyf, GlyphId $glyphId, array $visited, ?NormalizedCoordinates $coordinates): GlyphOutline
     {
         $this->assertGlyphId($glyphId);
 
         if (isset($visited[$glyphId->value])) {
             throw new InvalidFontException(\sprintf('Compound glyph cycle detected at glyph ID %d.', $glyphId->value));
+        }
+
+        if (\count($visited) > self::MAX_COMPOSITE_DEPTH) {
+            throw new InvalidFontException(\sprintf('Compound glyph nesting exceeds %d levels at glyph ID %d.', self::MAX_COMPOSITE_DEPTH, $glyphId->value));
         }
 
         $visited[$glyphId->value] = true;
@@ -545,7 +576,6 @@ final readonly class SfntFont
             return new GlyphOutline($glyphId, []);
         }
 
-        $glyf = $this->reader->table($this->tables['glyf']);
         $numberOfContours = $glyf->int16($start);
 
         if ($numberOfContours >= 0) {
@@ -744,7 +774,7 @@ final readonly class SfntFont
         $contours = [];
 
         foreach ($components as $component) {
-            foreach ($this->readGlyph($component['glyphId'], $visited, $coordinates)->contours as $contour) {
+            foreach ($this->readGlyph($glyf, $component['glyphId'], $visited, $coordinates)->contours as $contour) {
                 $contours[] = $contour->transform(
                     $component['xx'],
                     $component['yx'],
@@ -768,7 +798,7 @@ final readonly class SfntFont
         return $coordinates->normalized($this->variations, $this->avar);
     }
 
-    private function glyphPointCount(GlyphId $glyphId): int
+    private function glyphPointCount(BinaryReader $glyf, GlyphId $glyphId): int
     {
         $start = $this->glyphOffsets[$glyphId->value];
         $end = $this->glyphOffsets[$glyphId->value + 1];
@@ -777,7 +807,6 @@ final readonly class SfntFont
             return 0;
         }
 
-        $glyf = $this->reader->table($this->tables['glyf']);
         $numberOfContours = $glyf->int16($start);
 
         if ($numberOfContours <= 0) {
@@ -787,7 +816,7 @@ final readonly class SfntFont
         return $glyf->uint16($start + 10 + ($numberOfContours - 1) * 2) + 1;
     }
 
-    private function componentMetricsGlyphId(GlyphId $glyphId): ?GlyphId
+    private function componentMetricsGlyphId(BinaryReader $glyf, GlyphId $glyphId): ?GlyphId
     {
         $start = $this->glyphOffsets[$glyphId->value];
         $end = $this->glyphOffsets[$glyphId->value + 1];
@@ -795,8 +824,6 @@ final readonly class SfntFont
         if ($start === $end) {
             return null;
         }
-
-        $glyf = $this->reader->table($this->tables['glyf']);
 
         if ($glyf->int16($start) >= 0) {
             return null;
