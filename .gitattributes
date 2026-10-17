@@ -4,6 +4,7 @@
 /.github                     export-ignore
 /.gitignore                  export-ignore
 /.php-cs-fixer.dist.php      export-ignore
+/bench                       export-ignore
 /composer.lock               export-ignore
 /docs                        export-ignore
 /phpstan.neon.dist           export-ignore

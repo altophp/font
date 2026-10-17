@@ -1,6 +1,7 @@
 parameters:
     level: max
     paths:
+        - bench
         - src
         - tests
         - tools
