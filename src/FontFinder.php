@@ -23,6 +23,7 @@ use Alto\Font\Loader\FontLoaderInterface;
 use Alto\Font\Locator\FontLocator;
 use Alto\Font\Locator\FontLocatorInterface;
 use Alto\Font\Metadata\FontMetadata;
+use Alto\Font\Variation\FontVariations;
 
 /**
  * Finds the closest matching font from configured locations.
@@ -32,14 +33,26 @@ use Alto\Font\Metadata\FontMetadata;
 final class FontFinder
 {
     /**
+     * Parsed fonts kept for repeated queries; older entries are evicted first.
+     */
+    private const int FONT_CACHE_SIZE = 8;
+
+    /**
      * @var list<string>|null
      */
     private ?array $candidates = null;
 
     /**
-     * @var array<string, Font>
+     * What scoring needs from each candidate, without the parsed font.
+     *
+     * @var array<string, array{FontMetadata, FontVariations|null}>
      */
-    private array $fontsByPath = [];
+    private array $descriptions = [];
+
+    /**
+     * @var array<string, Font> most recently used last
+     */
+    private array $fonts = [];
 
     /**
      * @var array<string, string|null>
@@ -151,21 +164,40 @@ final class FontFinder
 
         $bestPath = null;
         $bestScore = PHP_INT_MIN;
+        $bestFont = null;
 
         foreach ($this->candidates() as $path) {
-            $font = $this->loadCandidate($path);
-            $metadata = $font?->metadata();
-
-            if (null === $metadata || !$this->familyMatches($metadata, $query)) {
+            if (isset($this->diagnostics[$path])) {
                 continue;
             }
 
-            $score = $this->score($font, $metadata, $query);
+            $font = null;
+
+            if (!isset($this->descriptions[$path])) {
+                $font = $this->describe($path);
+
+                if (null === $font) {
+                    continue;
+                }
+            }
+
+            [$metadata, $variations] = $this->descriptions[$path];
+
+            if (!$this->familyMatches($metadata, $query)) {
+                continue;
+            }
+
+            $score = $this->score($variations, $metadata, $query);
 
             if ($score > $bestScore) {
                 $bestPath = $path;
                 $bestScore = $score;
+                $bestFont = $font;
             }
+        }
+
+        if (null !== $bestPath && null !== $bestFont) {
+            $this->remember($bestPath, $bestFont);
         }
 
         $this->queryPathCache[$key] = $bestPath;
@@ -173,23 +205,58 @@ final class FontFinder
         return $bestPath;
     }
 
-    private function loadCandidate(string $path): ?Font
+    /**
+     * Parses a candidate once and keeps only its metadata and axes.
+     */
+    private function describe(string $path): ?Font
     {
         try {
-            $font = $this->loadFont($path);
-            unset($this->diagnostics[$path]);
-
-            return $font;
+            $font = $this->loader->load($path);
         } catch (FontExceptionInterface $exception) {
-            $this->diagnostics[$path] = $exception;
+            $this->diagnostics[$path] = self::detach($exception::class, $exception->getMessage(), $exception->getCode());
 
             return null;
         }
+
+        $this->descriptions[$path] = [$font->metadata(), $font->variations()];
+
+        return $font;
+    }
+
+    /**
+     * Rebuilds an exception from scalars only: the original trace holds the whole
+     * file contents of the rejected candidate in its call arguments, and passing
+     * the exception itself here would keep it alive through this frame.
+     *
+     * @param class-string<FontExceptionInterface> $class
+     */
+    private static function detach(string $class, string $message, int $code): FontExceptionInterface
+    {
+        return new $class($message, $code);
     }
 
     private function loadFont(string $path): Font
     {
-        return $this->fontsByPath[$path] ??= $this->loader->load($path);
+        $font = $this->fonts[$path] ?? $this->loader->load($path);
+        $this->remember($path, $font);
+
+        return $font;
+    }
+
+    private function remember(string $path, Font $font): void
+    {
+        unset($this->fonts[$path]);
+        $this->fonts[$path] = $font;
+
+        while (\count($this->fonts) > self::FONT_CACHE_SIZE) {
+            $oldest = array_key_first($this->fonts);
+
+            if (null === $oldest) {
+                break;
+            }
+
+            unset($this->fonts[$oldest]);
+        }
     }
 
     private function withQueryVariations(Font $font, FontQuery $query): Font
@@ -222,10 +289,9 @@ final class FontFinder
      * Explicit criteria score in the hundreds. An unset criterion only breaks
      * ties, in tens at most, so that a family-only query prefers the regular face.
      */
-    private function score(Font $font, FontMetadata $metadata, FontQuery $query): int
+    private function score(?FontVariations $variations, FontMetadata $metadata, FontQuery $query): int
     {
         $score = 1000;
-        $variations = $font->variations();
         $descriptor = $metadata->descriptor;
 
         if (null === $query->weight) {
