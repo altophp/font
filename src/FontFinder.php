@@ -13,7 +13,9 @@ declare(strict_types=1);
 
 namespace Alto\Font;
 
+use Alto\Font\Descriptor\FontStretch;
 use Alto\Font\Descriptor\FontStyle;
+use Alto\Font\Descriptor\FontWeight;
 use Alto\Font\Exception\FontExceptionInterface;
 use Alto\Font\Exception\FontNotFoundException;
 use Alto\Font\Loader\FontLoader;
@@ -216,33 +218,40 @@ final class FontFinder
         return strtolower($metadata->family) === strtolower($query->family);
     }
 
+    /**
+     * Explicit criteria score in the hundreds. An unset criterion only breaks
+     * ties, in tens at most, so that a family-only query prefers the regular face.
+     */
     private function score(Font $font, FontMetadata $metadata, FontQuery $query): int
     {
         $score = 1000;
         $variations = $font->variations();
+        $descriptor = $metadata->descriptor;
 
-        if (null !== $query->weight) {
-            if ($metadata->descriptor->weight->value === $query->weight->value) {
-                $score += 200;
-            } elseif (null !== $variations && $variations->hasAxis('wght')) {
-                $score += 150;
-            } else {
-                $score -= abs($metadata->descriptor->weight->value - $query->weight->value);
-            }
+        if (null === $query->weight) {
+            $score -= intdiv(abs($descriptor->weight->value - FontWeight::normal()->value), 10);
+        } elseif ($descriptor->weight->value === $query->weight->value) {
+            $score += 200;
+        } elseif (null !== $variations && $variations->hasAxis('wght')) {
+            $score += 150;
+        } else {
+            $score -= abs($descriptor->weight->value - $query->weight->value);
         }
 
-        if (null !== $query->style) {
-            $score += $metadata->descriptor->style === $query->style ? 100 : -100;
+        if (null === $query->style) {
+            $score -= FontStyle::Normal === $descriptor->style ? 0 : 10;
+        } else {
+            $score += $descriptor->style === $query->style ? 100 : -100;
         }
 
-        if (null !== $query->stretch) {
-            if ($metadata->descriptor->stretch->percentage === $query->stretch->percentage) {
-                $score += 200;
-            } elseif (null !== $variations && $variations->hasAxis('wdth')) {
-                $score += 150;
-            } else {
-                $score -= abs($metadata->descriptor->stretch->percentage - $query->stretch->percentage);
-            }
+        if (null === $query->stretch) {
+            $score -= intdiv(abs($descriptor->stretch->percentage - FontStretch::normal()->percentage), 10);
+        } elseif ($descriptor->stretch->percentage === $query->stretch->percentage) {
+            $score += 200;
+        } elseif (null !== $variations && $variations->hasAxis('wdth')) {
+            $score += 150;
+        } else {
+            $score -= abs($descriptor->stretch->percentage - $query->stretch->percentage);
         }
 
         return $score;

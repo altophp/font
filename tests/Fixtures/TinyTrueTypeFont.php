@@ -22,6 +22,15 @@ final class TinyTrueTypeFont
         file_put_contents($path, self::sfnt(self::tables($compoundCycle, $unsupportedCff)));
     }
 
+    public static function writeWithNames(string $path, string $family, string $subfamily): void
+    {
+        $tables = self::tables(compoundCycle: false, unsupportedCff: false);
+        $tables['name'] = self::name($family, $subfamily);
+        ksort($tables);
+
+        file_put_contents($path, self::sfnt($tables));
+    }
+
     public static function writeWithDsig(string $path): void
     {
         $tables = self::tables(compoundCycle: false, unsupportedCff: false);
@@ -816,10 +825,10 @@ final class TinyTrueTypeFont
         return $data;
     }
 
-    private static function name(): string
+    private static function name(string $family = 'Atelier Tiny', string $subfamily = 'Regular'): string
     {
-        $family = self::utf16beAscii('Atelier Tiny');
-        $subfamily = self::utf16beAscii('Regular');
+        $family = self::utf16beAscii($family);
+        $subfamily = self::utf16beAscii($subfamily);
         $strings = $family.$subfamily;
 
         $records = self::u16(3).self::u16(1).self::u16(0x0409).self::u16(1).self::u16(\strlen($family)).self::u16(0);
