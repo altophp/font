@@ -42,6 +42,58 @@ final class CoverageTableTest extends TestCase
         self::assertSame([2, 5, 9], CoverageTable::parse(new BinaryReader("\0\0" . $coverage, 'built coverage'), 0, 2));
     }
 
+    public function testItBuildsRangesForConsecutiveGlyphs(): void
+    {
+        $coverage = CoverageTable::build(range(10, 19));
+
+        self::assertSame(
+            self::u16(2) . self::u16(1) . self::u16(10) . self::u16(19) . self::u16(0),
+            $coverage,
+        );
+        self::assertSame(range(10, 19), CoverageTable::parse(new BinaryReader("\0\0" . $coverage, 'range coverage'), 0, 2));
+    }
+
+    public function testItNumbersCoverageIndexesAcrossRanges(): void
+    {
+        $coverage = CoverageTable::build([...range(2, 5), ...range(20, 29), 40, 41]);
+
+        self::assertSame(
+            self::u16(2) . self::u16(3)
+            . self::u16(2) . self::u16(5) . self::u16(0)
+            . self::u16(20) . self::u16(29) . self::u16(4)
+            . self::u16(40) . self::u16(41) . self::u16(14),
+            $coverage,
+        );
+        self::assertSame(
+            [...range(2, 5), ...range(20, 29), 40, 41],
+            CoverageTable::parse(new BinaryReader("\0\0" . $coverage, 'ranged coverage'), 0, 2),
+        );
+    }
+
+    public function testItKeepsTheGlyphListForSparseGlyphs(): void
+    {
+        $coverage = CoverageTable::build([1, 3, 5, 7]);
+
+        self::assertSame(self::u16(1) . self::u16(4) . self::u16(1) . self::u16(3) . self::u16(5) . self::u16(7), $coverage);
+    }
+
+    public function testItKeepsTheGlyphListWhenBothEncodingsHaveTheSameSize(): void
+    {
+        $coverage = CoverageTable::build([1, 2, 3, 10, 11, 12]);
+
+        self::assertSame(self::u16(1), substr($coverage, 0, 2));
+        self::assertSame(16, \strlen($coverage));
+        self::assertSame([1, 2, 3, 10, 11, 12], CoverageTable::parse(new BinaryReader("\0\0" . $coverage, 'tie coverage'), 0, 2));
+    }
+
+    public function testItBuildsAnEmptyCoverage(): void
+    {
+        $coverage = CoverageTable::build([]);
+
+        self::assertSame(self::u16(1) . self::u16(0), $coverage);
+        self::assertSame([], CoverageTable::parse(new BinaryReader("\0\0" . $coverage, 'empty coverage'), 0, 2));
+    }
+
     public function testItRejectsAnUnorderedFormatOneCoverage(): void
     {
         $coverage = self::u16(1) . self::u16(2) . self::u16(5) . self::u16(5);

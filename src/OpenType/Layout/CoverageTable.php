@@ -108,10 +108,56 @@ final readonly class CoverageTable
 
         $glyphs = array_keys($set);
         sort($glyphs, \SORT_NUMERIC);
+        $ranges = self::ranges($glyphs);
+
+        if (\count($ranges) * 6 < \count($glyphs) * 2) {
+            $data = '';
+            $coverageIndex = 0;
+
+            foreach ($ranges as [$start, $end]) {
+                $data .= self::uint16($start) . self::uint16($end) . self::uint16($coverageIndex);
+                $coverageIndex += $end - $start + 1;
+            }
+
+            return self::uint16(2) . self::uint16(\count($ranges)) . $data;
+        }
 
         return self::uint16(1)
             . self::uint16(\count($glyphs))
             . implode('', array_map(self::uint16(...), $glyphs));
+    }
+
+    /**
+     * Groups sorted, unique glyph IDs into inclusive ranges of consecutive IDs.
+     *
+     * @param list<int> $glyphs
+     *
+     * @return list<array{int, int}>
+     */
+    private static function ranges(array $glyphs): array
+    {
+        $ranges = [];
+        $current = null;
+
+        foreach ($glyphs as $glyphId) {
+            if (null !== $current && $glyphId === $current[1] + 1) {
+                $current[1] = $glyphId;
+
+                continue;
+            }
+
+            if (null !== $current) {
+                $ranges[] = $current;
+            }
+
+            $current = [$glyphId, $glyphId];
+        }
+
+        if (null !== $current) {
+            $ranges[] = $current;
+        }
+
+        return $ranges;
     }
 
     private static function uint16(int $value): string
